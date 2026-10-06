@@ -21,15 +21,6 @@ type PeriodMode = "single" | "all";
 type RouteShape = "auto" | "normal" | "circular";
 type ScheduleMode = "auto" | "exact" | "frequency";
 
-const initialStops: Stop[] = [
-  { code: "1042", name: "Plaça de la Vila", times: ["06:20", "06:50", "07:20", "07:50", "08:20", "08:50"] },
-  { code: "1047", name: "Mercat Central", times: ["06:24", "06:54", "07:24", "07:54", "08:24", "08:54"] },
-  { code: "1051", name: "Av. Catalunya", times: ["06:29", "06:59", "07:29", "07:59", "08:29", "08:59"] },
-  { code: "1058", name: "Hospital Comarcal", times: ["06:35", "07:05", "07:35", "08:05", "08:35", "09:05"] },
-  { code: "1064", name: "Estació d’autobusos", times: ["06:42", "07:12", "07:42", "08:12", "08:42", "09:12"] },
-  { code: "1070", name: "Parc Tecnològic", times: ["06:48", "07:18", "07:48", "08:18", "08:48", "09:18"] },
-];
-
 const layoutNames: Record<Layout, string> = {
   "map-table": "A4 · recorregut + horaris",
   table: "A4 · horaris complets",
@@ -124,7 +115,7 @@ function frequencyBands(times: string[]) {
 }
 
 export default function Home() {
-  const [stops, setStops] = useState(initialStops);
+  const [stops, setStops] = useState<Stop[]>([]);
   const [layout, setLayout] = useState<Layout>("map-table");
   const [routeShape, setRouteShape] = useState<RouteShape>("auto");
   const [detectedCircular, setDetectedCircular] = useState(false);
@@ -132,22 +123,22 @@ export default function Home() {
   const [kind, setKind] = useState<LineKind>("Exprés");
   const [night, setNight] = useState(false);
   const [gradient, setGradient] = useState(true);
-  const [current, setCurrent] = useState(2);
-  const [lineCode, setLineCode] = useState("E12.2");
+  const [current, setCurrent] = useState(0);
+  const [lineCode, setLineCode] = useState("");
   const [lineColor, setLineColor] = useState("#93D500");
   const [hexDraft, setHexDraft] = useState("#93D500");
   const [customColorOpen, setCustomColorOpen] = useState(false);
   const [badgeInk, setBadgeInk] = useState<BadgeInk>("white");
-  const [origin, setOrigin] = useState("Vila Nova");
-  const [destination, setDestination] = useState("Barcelona");
+  const [origin, setOrigin] = useState("");
+  const [destination, setDestination] = useState("");
   const [period, setPeriod] = useState("Dilluns a divendres feiners");
   const [periodMode, setPeriodMode] = useState<PeriodMode>("single");
-  const [operator, setOperator] = useState("Operador de transport");
-  const [validity, setValidity] = useState("Darrera actualització: 15.09.2026");
-  const [contact, setContact] = useState("012");
-  const [infoUrl, setInfoUrl] = useState("mobilitat.gencat.cat");
+  const [operator, setOperator] = useState("");
+  const [validity, setValidity] = useState("");
+  const [contact, setContact] = useState("");
+  const [infoUrl, setInfoUrl] = useState("");
   const [accessible, setAccessible] = useState(true);
-  const [activeTab, setActiveTab] = useState<"design" | "data">("design");
+  const [activeTab, setActiveTab] = useState<"design" | "data">("data");
   const fileRef = useRef<HTMLInputElement>(null);
   const legacyFileRef = useRef<HTMLInputElement>(null);
   const [feedOptions, setFeedOptions] = useState<GtfsFeedOption[]>([]);
@@ -162,30 +153,17 @@ export default function Home() {
   const [importedTrips, setImportedTrips] = useState(0);
   const [batchPrint, setBatchPrint] = useState(false);
   const [allPeriodImports, setAllPeriodImports] = useState<LineImport[]>([]);
-  useEffect(() => {
-    const saved = localStorage.getItem("emma-project");
-    if (!saved) return;
-    const restore = window.setTimeout(() => {
-      try {
-        const data = JSON.parse(saved);
-        if (data.stops?.length) setStops(data.stops);
-        if (data.lineCode) setLineCode(data.lineCode);
-        if (data.lineColor) setLineColor(data.lineColor);
-        if (data.badgeInk === "white" || data.badgeInk === "black") setBadgeInk(data.badgeInk);
-        if (data.origin) setOrigin(data.origin);
-        if (data.destination) setDestination(data.destination);
-        if (data.operator) setOperator(data.operator);
-        if (data.validity) setValidity(data.validity.replace(/^Vigent des del\s*/i, "Darrera actualització: "));
-        if (data.contact) setContact(data.contact);
-        if (data.infoUrl) setInfoUrl(data.infoUrl);
-      } catch { /* Ignore an invalid local draft. */ }
-    }, 0);
-    return () => window.clearTimeout(restore);
-  }, []);
+  const [newProjectDialog, setNewProjectDialog] = useState(false);
+  const [savedSnapshot, setSavedSnapshot] = useState("");
 
-  useEffect(() => {
-    localStorage.setItem("emma-project", JSON.stringify({ stops, lineCode, lineColor, badgeInk, origin, destination, operator, validity, contact, infoUrl }));
-  }, [stops, lineCode, lineColor, badgeInk, origin, destination, operator, validity, contact, infoUrl]);
+  const projectData = useMemo(() => ({
+    stops, layout, routeShape, scheduleMode, kind, night, gradient, current, lineCode,
+    lineColor, badgeInk, origin, destination, period, periodMode, operator, validity,
+    contact, infoUrl, accessible,
+  }), [stops, layout, routeShape, scheduleMode, kind, night, gradient, current, lineCode, lineColor, badgeInk, origin, destination, period, periodMode, operator, validity, contact, infoUrl, accessible]);
+  const projectSnapshot = useMemo(() => JSON.stringify(projectData), [projectData]);
+  const hasProjectData = stops.length > 0 || Boolean(lineCode.trim() || origin.trim() || destination.trim() || operator.trim());
+  const isDirty = hasProjectData && projectSnapshot !== savedSnapshot;
 
   useEffect(() => {
     const syncDraft = window.setTimeout(() => setHexDraft(lineColor.toUpperCase()), 0);
@@ -197,6 +175,13 @@ export default function Home() {
     window.addEventListener("afterprint", finishPrint);
     return () => window.removeEventListener("afterprint", finishPrint);
   }, []);
+
+  useEffect(() => {
+    if (!isDirty) return;
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warnBeforeLeaving);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
+  }, [isDirty]);
 
   const allTrips = useMemo(() => {
     const max = Math.max(...stops.map((s) => s.times.length), 0);
@@ -222,6 +207,7 @@ export default function Home() {
     }), [batchPrint, periodVariants, stops, current, effectiveLayout, useFrequency]);
   const directionOptions = dataset ? directionsFor(dataset, selectedRoute) : [];
   const serviceOptions = dataset ? servicesFor(dataset, selectedRoute, selectedDirection) : [];
+  const versionCount = periodVariants.reduce((total, variant) => total + variant.stops.length, 0);
 
   const updateStop = (index: number, key: "name" | "code", value: string) => {
     setStops((old) => old.map((s, i) => i === index ? { ...s, [key]: value } : s));
@@ -383,24 +369,75 @@ export default function Home() {
     window.setTimeout(() => window.print(), 350);
   };
 
+  const saveProject = () => {
+    if (!hasProjectData) return;
+    localStorage.setItem("emma-project", projectSnapshot);
+    setSavedSnapshot(projectSnapshot);
+  };
+
+  const resetProject = () => {
+    setStops([]);
+    setLayout("map-table");
+    setRouteShape("auto");
+    setDetectedCircular(false);
+    setScheduleMode("auto");
+    setKind("Exprés");
+    setNight(false);
+    setGradient(true);
+    setCurrent(0);
+    setLineCode("");
+    setLineColor("#93D500");
+    setBadgeInk("white");
+    setOrigin("");
+    setDestination("");
+    setPeriod("Dilluns a divendres feiners");
+    setPeriodMode("single");
+    setOperator("");
+    setValidity("");
+    setContact("");
+    setInfoUrl("");
+    setAccessible(true);
+    setActiveTab("data");
+    setFeedOptions([]);
+    setDataset(null);
+    setSelectedRoute("");
+    setSelectedDirection("0");
+    setSelectedService("");
+    setGtfsStatus("idle");
+    setGtfsMessage("");
+    setImportWarnings([]);
+    setImportNotes([]);
+    setImportedTrips(0);
+    setAllPeriodImports([]);
+    setSavedSnapshot("");
+    setNewProjectDialog(false);
+  };
+
+  const requestNewProject = () => {
+    if (isDirty) setNewProjectDialog(true);
+    else resetProject();
+  };
+
   return (
     <main className="app-shell">
       <SiteHeader />
+      <input ref={fileRef} type="file" accept=".zip,application/zip" hidden onChange={(event) => handleGtfs(event.target.files?.[0])} />
       <header className="topbar editor-subheader">
         <div className="brand">
-          <nav className="workspace-path" aria-label="Document actual"><span>Eina d’horaris</span><i>/</i><b>{lineCode}</b></nav>
+          <nav className="workspace-path" aria-label="Document actual"><span>Eina d’horaris</span><i>/</i><b>{lineCode || "Nou projecte"}</b></nav>
         </div>
         <div className="top-actions">
-          <span className="saved"><i /> Desat en local</span>
-          <button className="ghost" onClick={() => localStorage.setItem("emma-project", JSON.stringify({ stops, lineCode, lineColor, badgeInk, origin, destination, operator, validity, contact, infoUrl }))}>Desa</button>
-          <button className="ghost" onClick={() => window.print()}>Previsualitza PDF</button>
-          <button className="primary" onClick={exportVersions}>Genera {periodVariants.reduce((total, variant) => total + variant.stops.length, 0)} versions <span>↗</span></button>
+          <button className="new-project-action" onClick={requestNewProject}><span>＋</span> Nou projecte</button>
+          <span className={`saved ${isDirty ? "dirty" : ""}`}><i /> {hasProjectData ? (isDirty ? "Canvis sense desar" : "Desat en local") : "Projecte buit"}</span>
+          <button className="ghost" onClick={saveProject} disabled={!hasProjectData}>Desa</button>
+          <button className="ghost" onClick={() => window.print()} disabled={!stops.length}>Previsualitza PDF</button>
+          <button className="primary" onClick={exportVersions} disabled={!stops.length}>Genera {versionCount} {versionCount === 1 ? "versió" : "versions"} <span>↗</span></button>
         </div>
       </header>
 
       <section className="workspace">
         <aside className="sidebar">
-          <div className="project-line"><span>Projecte</span><button>Emma · línia {lineCode}⌄</button></div>
+          <div className="project-line"><span>Projecte</span><button>{lineCode ? `Emma · línia ${lineCode}` : "Nou projecte"}</button></div>
           <div className="tabs">
             <button className={activeTab === "design" ? "active" : ""} onClick={() => setActiveTab("design")}>Disseny</button>
             <button className={activeTab === "data" ? "active" : ""} onClick={() => setActiveTab("data")}>Dades <b>{stops.length}</b></button>
@@ -458,7 +495,6 @@ export default function Home() {
           </div> : <div className="panel-scroll data-panel">
             <div className="gtfs-intro"><span>01 · FONT DE DADES</span><h3>Importa el GTFS</h3><p>Emma detecta línies, sentits, períodes, recorreguts circulars i densitat d’horaris.</p></div>
             <button className={`upload gtfs-upload ${gtfsStatus === "reading" ? "is-reading" : ""}`} onClick={() => fileRef.current?.click()} disabled={gtfsStatus === "reading"}><span>{gtfsStatus === "reading" ? "…" : "↑"}</span><b>{gtfsStatus === "reading" ? "Analitzant el GTFS" : "Puja un fitxer GTFS.zip"}</b><small>El processament es fa localment al navegador</small></button>
-            <input ref={fileRef} type="file" accept=".zip,application/zip" hidden onChange={(e) => handleGtfs(e.target.files?.[0])} />
             {gtfsMessage && <div className={`import-message ${gtfsStatus}`}><i />{gtfsMessage}</div>}
             {feedOptions.length > 1 && !dataset && <div className="feed-picker"><b>Feeds disponibles</b>{feedOptions.map((feed) => <button key={feed.name} onClick={() => chooseDataset(feed)}><span>▤</span><span><b>{feed.name.replace(/\.zip$/i, "")}</b><small>Obre i analitza aquest feed</small></span><i>→</i></button>)}</div>}
             {dataset && <>
@@ -484,8 +520,17 @@ export default function Home() {
             <span>{layoutNames[layout]} · {effectiveCircular ? "Circular" : "Normal"} · {useFrequency ? "Freqüències" : "Exacte"}</span>
             <div><button>⌗</button><button>↗</button></div>
           </div>
-          <div className={`paper-stack layout-${effectiveLayout}`}>
-            {renderedVersions.map(({ page, stop, stopIndex, periodLabel, periodNotes }, versionIndex) => <TimetablePage
+          <div className={`paper-stack layout-${effectiveLayout}${stops.length ? "" : " empty-project-canvas"}`}>
+            {!stops.length ? <article className="timetable empty-timetable">
+              <div className="empty-sheet-upload">
+                <span className="empty-sheet-icon" aria-hidden="true">↑</span>
+                <small>PROJECTE NOU</small>
+                <h2>Comença amb un fitxer GTFS</h2>
+                <p>Puja el paquet <b>.zip</b> de l’operador. Emma prepararà les línies, els sentits, els períodes i totes les versions per parada.</p>
+                <button onClick={() => fileRef.current?.click()}>Puja un GTFS.zip <span>→</span></button>
+                <em>El fitxer es processa localment al navegador</em>
+              </div>
+            </article> : renderedVersions.map(({ page, stop, stopIndex, periodLabel, periodNotes }, versionIndex) => <TimetablePage
               key={`${versionIndex}-${stopIndex}-${page.stopOffset}-${page.tripOffset}`}
               page={page}
               layout={effectiveLayout}
@@ -510,6 +555,19 @@ export default function Home() {
           </div>
         </section>
       </section>
+      {newProjectDialog && <div className="modal-backdrop" role="presentation" onMouseDown={() => setNewProjectDialog(false)}>
+        <section className="new-project-dialog" role="dialog" aria-modal="true" aria-labelledby="new-project-title" onMouseDown={(event) => event.stopPropagation()}>
+          <div className="dialog-icon" aria-hidden="true">＋</div>
+          <small>NOU PROJECTE</small>
+          <h2 id="new-project-title">Vols desar els canvis?</h2>
+          <p>El projecte actual té canvis sense desar. Si continues sense desar-los, es perdran.</p>
+          <div className="dialog-actions">
+            <button className="quiet" onClick={() => setNewProjectDialog(false)}>Cancel·la</button>
+            <button className="danger" onClick={resetProject}>Descarta i crea’n un de nou</button>
+            <button className="confirm" onClick={() => { saveProject(); resetProject(); }}>Desa i crea’n un de nou</button>
+          </div>
+        </section>
+      </div>}
     </main>
   );
 }

@@ -22,7 +22,9 @@ test("server-renders the Emma GTFS product shell", async () => {
   assert.match(html, /<title>Emma — Generador d’horaris de bus<\/title>/i);
   assert.match(html, /Creador d’horaris/i);
   assert.match(html, /Eina d’horaris/i);
-  assert.match(html, /Informació de línia/i);
+  assert.match(html, /Comença amb un fitxer GTFS/i);
+  assert.match(html, /Puja un GTFS\.zip/i);
+  assert.match(html, /Nou projecte/i);
   assert.doesNotMatch(html, />Inici<|>Projectes<|>Contacte</i);
 });
 
