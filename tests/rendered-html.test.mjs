@@ -54,7 +54,9 @@ test("keeps GTFS import, adaptive templates and pagination connected", async () 
   assert.match(css, /--preview-zoom/);
   assert.match(css, /transform:scale\(var\(--preview-zoom,1\)\)/);
   assert.match(css, /break-after:\s*page/);
-  assert.match(css, /@page\{size:216mm 303mm;margin:0\}/);
+  assert.match(css, /@page\{size:A4 portrait;margin:0\}/);
+  assert.match(css, /width:210mm!important/);
+  assert.match(css, /height:297mm!important/);
   assert.match(css, /\.site-header,.topbar,.sidebar,.canvas-toolbar,.modal-backdrop\{display:none!important\}/);
   assert.match(css, /paper-stack>\.paper-wrap:before/);
 });
