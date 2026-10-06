@@ -65,13 +65,26 @@ type PagePlan = {
 };
 
 function paginate(stops: Stop[], current: number, layout: Layout, frequency: boolean): PagePlan[] {
-  const rowLimit = layout === "table" ? 54 : 46;
+  const rowLimit = layout === "table" ? 44 : 36;
   const columnLimit = layout === "table" ? 16 : 10;
   const tripCount = Math.max(...stops.map((stop) => stop.times.length), 0);
-  const stopChunks = Array.from({ length: Math.max(1, Math.ceil(stops.length / rowLimit)) }, (_, index) => ({
-    offset: index * rowLimit,
-    stops: stops.slice(index * rowLimit, (index + 1) * rowLimit),
-  }));
+  const charsPerRow = layout === "table" ? 54 : 38;
+  const stopChunks: { offset: number; stops: Stop[] }[] = [];
+  let chunk: Stop[] = [];
+  let chunkUnits = 0;
+  let chunkStart = 0;
+  stops.forEach((stop, index) => {
+    const units = Math.max(1, Math.ceil(stop.name.length / charsPerRow));
+    if (chunk.length && chunkUnits + units > rowLimit) {
+      stopChunks.push({ offset: chunkStart, stops: chunk });
+      chunk = [];
+      chunkUnits = 0;
+      chunkStart = index;
+    }
+    chunk.push(stop);
+    chunkUnits += units;
+  });
+  if (chunk.length || !stops.length) stopChunks.push({ offset: chunkStart, stops: chunk });
   const tripOffsets = frequency
     ? [0]
     : Array.from({ length: Math.max(1, Math.ceil(tripCount / columnLimit)) }, (_, index) => index * columnLimit);
@@ -526,8 +539,8 @@ export default function Home() {
             <span>{layoutNames[layout]} · {effectiveCircular ? "Circular" : "Normal"} · {useFrequency ? "Freqüències" : "Exacte"}</span>
             <div><button onClick={() => setZoom(78)} aria-label="Ajusta el full a la vista" title="Ajusta el full a la vista">⌗</button><button>↗</button></div>
           </div>
-          <div className={`paper-stack layout-${effectiveLayout}${stops.length ? "" : " empty-project-canvas"}`} style={{ "--preview-zoom": zoom / 100 } as React.CSSProperties}>
-            {!stops.length ? <article className="timetable empty-timetable">
+          <div className={`paper-stack layout-${effectiveLayout}${stops.length ? "" : " empty-project-canvas"}`} style={{ "--preview-zoom": zoom / 100, "--preview-width": `${8 * zoom}px`, "--preview-height": `${11.312 * zoom}px` } as React.CSSProperties}>
+            {!stops.length ? <div className="paper-wrap empty-paper-wrap"><article className="timetable empty-timetable">
               <div className="empty-sheet-upload">
                 <span className="empty-sheet-icon" aria-hidden="true">↑</span>
                 <small>PROJECTE NOU</small>
@@ -536,7 +549,7 @@ export default function Home() {
                 <button onClick={() => fileRef.current?.click()}>Puja un GTFS.zip <span>→</span></button>
                 <em>El fitxer es processa localment al navegador</em>
               </div>
-            </article> : renderedVersions.map(({ page, stop, stopIndex, periodLabel, periodNotes }, versionIndex) => <TimetablePage
+            </article></div> : renderedVersions.map(({ page, stop, stopIndex, periodLabel, periodNotes }, versionIndex) => <TimetablePage
               key={`${versionIndex}-${stopIndex}-${page.stopOffset}-${page.tripOffset}`}
               page={page}
               layout={effectiveLayout}
@@ -610,7 +623,7 @@ function TimetablePage({ page, layout, circular, frequency, currentStop, lineCod
         <div className="route-title"><div className="line-badge" style={{ background: lineColor, color: badgeInk === "white" ? "#ffffff" : "#111111" }}>{lineCode}</div><div><span className="operator-line"><small>OPERAT PER</small><b>{operator.toUpperCase()}</b></span><h1>{origin} <i>→</i> {destination}</h1><p>{validity}</p></div></div>
         <div className="stop-code"><small>CODI DE PARADA</small><b>{currentStop?.code || "—"}</b></div>
       </header>
-      {page.total > 1 && <div className="continuation"><span>{page.section}</span><b>{page.page} / {page.total}</b></div>}
+      {page.total > 1 && <div className="continuation"><span><strong>{page.page === 1 ? "INICI" : "CONTINUACIÓ"}</strong>{page.section}</span><b>Pàgina {page.page} / {page.total}</b></div>}
       <div className="sheet-body">
         {layout !== "table" && <RouteDiagram stops={page.stops} current={page.current} circle={circular} color={lineColor} />}
         <div className="schedule-area">
@@ -649,15 +662,12 @@ function CircularRouteDiagram({ stops, current, color }: { stops: Stop[]; curren
   const right = stops.slice(midpoint).map((stop, index) => ({ stop, index: midpoint + index })).reverse();
   const rows = Math.max(left.length, right.length);
   const rowHeight = Math.max(22, Math.min(48, 520 / Math.max(rows, 1)));
-  const currentSide = current < midpoint ? "points-left" : "points-right";
-  const currentRow = current < midpoint ? current : Math.max(0, stops.length - 1 - current);
-  const currentTop = `${((currentRow + 0.5) / Math.max(rows, 1)) * 100}%`;
   return <section className={`route-diagram circular-diagram ${stops.length > 24 ? "ultra-dense" : stops.length > 14 ? "dense" : ""}`} style={{ "--route": color, "--loop-row": `${rowHeight}px` } as React.CSSProperties}>
     <div className="diagram-heading"><small>RECORREGUT CIRCULAR</small><b>{stops.length} parades · sentit indicat</b></div>
     <div className="circular-route">
-      <div className="circular-branch left-branch">{left.map(({ stop, index }) => <div className={`circular-stop ${index === current ? "here" : ""}`} key={index}><div><b>{stop.name}</b></div><i /></div>)}</div>
-      <div className="loop-track"><span className="arrow down" aria-hidden="true">↓</span><span className="arrow up" aria-hidden="true">↑</span>{stops[current] && <HereTag className="loop-current-tag" direction={currentSide === "points-right" ? "right" : "left"} style={{ top: currentTop }} />}</div>
-      <div className="circular-branch right-branch">{right.map(({ stop, index }) => <div className={`circular-stop ${index === current ? "here" : ""}`} key={index}><i /><div><b>{stop.name}</b></div></div>)}</div>
+      <div className="circular-branch left-branch">{left.map(({ stop, index }) => <div className={`circular-stop ${index === current ? "here" : ""}`} key={index}><div><b>{stop.name}</b></div><i />{index === current && <HereTag className="circular-current-tag" direction="left" />}</div>)}</div>
+      <div className="loop-track"><span className="arrow down" aria-hidden="true">↓</span><span className="arrow up" aria-hidden="true">↑</span></div>
+      <div className="circular-branch right-branch">{right.map(({ stop, index }) => <div className={`circular-stop ${index === current ? "here" : ""}`} key={index}><i /><div><b>{stop.name}</b></div>{index === current && <HereTag className="circular-current-tag" direction="right" />}</div>)}</div>
     </div>
   </section>;
 }

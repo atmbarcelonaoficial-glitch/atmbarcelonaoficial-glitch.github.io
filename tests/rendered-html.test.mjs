@@ -43,11 +43,18 @@ test("keeps GTFS import, adaptive templates and pagination connected", async () 
   assert.match(page, /A4 · horaris complets/);
   assert.doesNotMatch(page, /Auto · recomanat|Mig A4 · línia/);
   assert.match(page, /function paginate/);
+  assert.match(page, /charsPerRow/);
+  assert.match(page, /CONTINUACIÓ/);
   assert.match(page, /function FrequencyTable/);
   assert.match(page, /detectedCircular/);
+  assert.match(page, /circular-current-tag/);
   assert.match(page, /setZoom/);
   assert.match(css, /paper-stack/);
   assert.match(css, /panel-scroll[^}]*overflow-y:auto/);
   assert.match(css, /--preview-zoom/);
+  assert.match(css, /transform:scale\(var\(--preview-zoom,1\)\)/);
   assert.match(css, /break-after:\s*page/);
+  assert.match(css, /@page\{size:216mm 303mm;margin:0\}/);
+  assert.match(css, /\.site-header,.topbar,.sidebar,.canvas-toolbar,.modal-backdrop\{display:none!important\}/);
+  assert.match(css, /paper-stack>\.paper-wrap:before/);
 });
