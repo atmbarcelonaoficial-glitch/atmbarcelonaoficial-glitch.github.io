@@ -20,8 +20,10 @@ test("server-renders the Emma GTFS product shell", async () => {
   const html = await response.text();
   assert.match(html, /<html lang="ca">/i);
   assert.match(html, /<title>Emma — Generador d’horaris de bus<\/title>/i);
-  assert.match(html, /Del GTFS al cartell/i);
-  assert.match(html, /Plantilles adaptatives/i);
+  assert.match(html, /Creador d’horaris/i);
+  assert.match(html, /Eina d’horaris/i);
+  assert.match(html, /Informació de línia/i);
+  assert.doesNotMatch(html, />Inici<|>Projectes<|>Contacte</i);
 });
 
 test("keeps GTFS import, adaptive templates and pagination connected", async () => {

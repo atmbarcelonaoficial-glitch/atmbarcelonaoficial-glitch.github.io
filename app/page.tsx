@@ -18,7 +18,6 @@ type Layout = "map-table" | "table";
 type LineKind = "AMB" | "Exprés" | "TMB";
 type BadgeInk = "white" | "black";
 type PeriodMode = "single" | "all";
-type AppView = "home" | "projects" | "editor" | "contact";
 type RouteShape = "auto" | "normal" | "circular";
 type ScheduleMode = "auto" | "exact" | "frequency";
 
@@ -125,7 +124,6 @@ function frequencyBands(times: string[]) {
 }
 
 export default function Home() {
-  const [appView, setAppView] = useState<AppView>("home");
   const [stops, setStops] = useState(initialStops);
   const [layout, setLayout] = useState<Layout>("map-table");
   const [routeShape, setRouteShape] = useState<RouteShape>("auto");
@@ -385,17 +383,12 @@ export default function Home() {
     window.setTimeout(() => window.print(), 350);
   };
 
-  if (appView === "home") return <><SiteHeader view={appView} onNavigate={setAppView} /><HomePage onNavigate={setAppView} /></>;
-  if (appView === "projects") return <><SiteHeader view={appView} onNavigate={setAppView} /><ProjectsPage onNavigate={setAppView} /></>;
-  if (appView === "contact") return <><SiteHeader view={appView} onNavigate={setAppView} /><ContactPage /></>;
-
   return (
     <main className="app-shell">
-      <SiteHeader view={appView} onNavigate={setAppView} />
+      <SiteHeader />
       <header className="topbar editor-subheader">
         <div className="brand">
-          <button className="back-projects" onClick={() => setAppView("projects")} aria-label="Torna als projectes">←</button>
-          <nav className="workspace-path" aria-label="Ubicació actual"><button onClick={() => setAppView("projects")}>Projectes</button><i>/</i><span>Horaris</span><i>/</i><b>{lineCode}</b></nav>
+          <nav className="workspace-path" aria-label="Document actual"><span>Eina d’horaris</span><i>/</i><b>{lineCode}</b></nav>
         </div>
         <div className="top-actions">
           <span className="saved"><i /> Desat en local</span>
@@ -568,67 +561,11 @@ function TimetablePage({ page, layout, circular, frequency, currentStop, lineCod
   </div>;
 }
 
-function SiteHeader({ view, onNavigate }: { view: AppView; onNavigate: (view: AppView) => void }) {
+function SiteHeader() {
   return <header className="site-header">
-    <button className="site-logo" onClick={() => onNavigate("home")}><i className="emma-pulse" aria-hidden="true" /><strong>Emma</strong><span>Creador d’horaris</span></button>
-    <nav aria-label="Navegació principal">
-      <button className={view === "home" ? "active" : ""} onClick={() => onNavigate("home")}>Inici</button>
-      <button className={view === "projects" || view === "editor" ? "active" : ""} onClick={() => onNavigate("projects")}>Projectes</button>
-      <button className={view === "contact" ? "active" : ""} onClick={() => onNavigate("contact")}>Contacte</button>
-    </nav>
+    <div className="site-logo" aria-label="Emma, creador d’horaris"><i className="emma-pulse" aria-hidden="true" /><strong>Emma</strong><span>Creador d’horaris</span></div>
     <button className="account-chip"><span>MG</span><b>Compte demo</b><i>⌄</i></button>
   </header>;
-}
-
-function HomePage({ onNavigate }: { onNavigate: (view: AppView) => void }) {
-  return <main className="marketing-page">
-    <section className="hero">
-      <div className="hero-copy"><span className="eyebrow">HORARIS DE TRANSPORT, BEN FETS</span><h1>Del GTFS al cartell,<br/><em>en un sol lloc.</em></h1><p>Crea, adapta i genera totes les versions d’un horari de bus amb un sistema modular pensat per a qualsevol xarxa de Catalunya.</p><div className="hero-actions"><button className="cta" onClick={() => onNavigate("projects")}>Importa un GTFS <span>→</span></button><button onClick={() => onNavigate("contact")}>Parlem-ne</button></div><div className="hero-proof"><span>✓ GTFS estàndard</span><span>✓ Plantilles adaptatives</span><span>✓ PDFs per a cada parada</span></div></div>
-      <div className="hero-product" aria-label="Vista prèvia del producte"><div className="mini-window"><div className="mini-bar"><i/><i/><i/><span>Emma / E12.2</span></div><div className="mini-body"><aside><b>Informació de línia</b><span/><span/><b>Format</b><span/><span/></aside><div className="mini-canvas"><article><header><strong>E12.2</strong><div><small>OPERAT PER BUS</small><b>Vila Nova → Barcelona</b></div></header><section><div className="mini-line"><i/><i/><i className="on"/><i/><i/></div><div className="mini-table"><b>HORARIS DE PAS</b>{[1,2,3,4,5].map(i=><span key={i}/>)}</div></section></article></div></div></div></div>
-    </section>
-    <section className="home-features"><div><span>01</span><h2>Puja el GTFS</h2><p>Emma valida el feed i detecta línies, sentits, calendaris, variants i recorreguts circulars.</p></div><div><span>02</span><h2>Revisa la proposta</h2><p>El sistema escull format, densitat, freqüències i paginació sense deixar blocs buits.</p></div><div><span>03</span><h2>Genera les versions</h2><p>Crea una peça per cada parada i exporta-les juntes, preparades per imprimir.</p></div></section>
-  </main>;
-}
-
-function ProjectsPage({ onNavigate }: { onNavigate: (view: AppView) => void }) {
-  const [activeMenu, setActiveMenu] = useState<string | null>(null);
-  const [shareTarget, setShareTarget] = useState<string | null>(null);
-  const [folders, setFolders] = useState([
-    { name: "AMB", count: 8, tone: "green" },
-    { name: "TMB", count: 4, tone: "red" },
-    { name: "Exprés.cat", count: 12, tone: "teal" },
-  ]);
-  const createFolder = () => {
-    const name = window.prompt("Nom de la carpeta nova");
-    if (name?.trim()) setFolders((currentFolders) => [...currentFolders, { name: name.trim(), count: 0, tone: "blue" }]);
-  };
-  return <main className="projects-page">
-    <aside className="library-nav"><button className="new-project" onClick={() => onNavigate("editor")}>＋ Nou projecte</button><nav><button className="active">▦ Tots els projectes</button><button>◷ Recents</button><button>☆ Favorits</button><button>⇄ Compartit amb mi</button></nav><div className="folder-title"><b>Carpetes</b><button>＋</button></div><nav><button>▱ AMB</button><button>▱ Exprés.cat</button><button>▱ TMB</button><button>▱ Proves</button></nav><nav className="library-bottom"><button>♲ Paperera</button></nav></aside>
-    <section className="library-content"><header><div><span>ESPAI DE TREBALL</span><h1>Projectes</h1><p>Organitza, comparteix i genera els teus horaris.</p></div><div className="library-tools"><label>⌕ <input placeholder="Cerca projectes" /></label><button className="create-folder" onClick={createFolder}><span>＋</span> Nova carpeta</button><button className="create-file" onClick={() => onNavigate("editor")}><span>＋</span> Nou projecte</button><button>Ordena ⌄</button><button aria-label="Vista en graella">▦</button></div></header>
-      <section className="quick-folders">{folders.map((folder) => <div className="quick-folder-card menu-host" key={folder.name}><button className="folder-open"><i className={`folder ${folder.tone}`}/><span><b>{folder.name}</b><small>{folder.count} projectes</small></span></button><button className="more-button" aria-label={`Més opcions per a ${folder.name}`} onClick={() => setActiveMenu(activeMenu === `folder-${folder.name}` ? null : `folder-${folder.name}`)}>···</button>{activeMenu === `folder-${folder.name}` && <ItemMenu kind="folder" onClose={() => setActiveMenu(null)} onShare={() => { setShareTarget(folder.name); setActiveMenu(null); }} />}</div>)}</section>
-      <div className="section-heading"><h2>Projectes recents</h2><button>Veure’ls tots</button></div>
-      <section className="project-grid"><ProjectCard color="#93D500" code="E12.2" title="Vila Nova — Barcelona" meta="Editat ara mateix" onOpen={() => onNavigate("editor")} menuOpen={activeMenu === "project-e12"} onMenu={() => setActiveMenu(activeMenu === "project-e12" ? null : "project-e12")} onShare={() => { setShareTarget("Vila Nova — Barcelona"); setActiveMenu(null); }} /><ProjectCard color="#FFD800" code="B8" title="Sant Boi — Barcelona" meta="Editat ahir" onOpen={() => onNavigate("editor")} menuOpen={activeMenu === "project-b8"} onMenu={() => setActiveMenu(activeMenu === "project-b8" ? null : "project-b8")} onShare={() => { setShareTarget("Sant Boi — Barcelona"); setActiveMenu(null); }} /><ProjectCard color="#E30613" code="H12" title="Gornal — Besòs/Verneda" meta="Editat fa 3 dies" onOpen={() => onNavigate("editor")} menuOpen={activeMenu === "project-h12"} onMenu={() => setActiveMenu(activeMenu === "project-h12" ? null : "project-h12")} onShare={() => { setShareTarget("Gornal — Besòs/Verneda"); setActiveMenu(null); }} /><button className="empty-project" onClick={() => onNavigate("editor")}><span>＋</span><b>Crea un projecte</b><small>GTFS, Excel o manual</small></button></section>
-    </section>
-    {shareTarget && <ShareDialog target={shareTarget} onClose={() => setShareTarget(null)} />}
-  </main>;
-}
-
-function ProjectCard({ color, code, title, meta, onOpen, menuOpen, onMenu, onShare }: { color: string; code: string; title: string; meta: string; onOpen: () => void; menuOpen: boolean; onMenu: () => void; onShare: () => void }) {
-  return <article className="project-card menu-host"><button className="project-open" onClick={onOpen}><div className="project-preview"><div style={{ background: color }}><strong>{code}</strong><span>{title}</span></div><i/><i/><i/><i/></div><div className="project-info"><span className="file-icon">▤</span><span><b>{title}</b><small>{meta} · 6 versions</small></span></div></button><button className="more-button card-more" aria-label={`Més opcions per a ${title}`} onClick={onMenu}>···</button>{menuOpen && <ItemMenu kind="project" onClose={onMenu} onShare={onShare} />}</article>;
-}
-
-function ItemMenu({ kind, onClose, onShare }: { kind: "folder" | "project"; onClose: () => void; onShare: () => void }) {
-  const action = (message: string) => { alert(`${message}. Aquesta acció es connectarà al backend a la fase següent.`); onClose(); };
-  return <div className="item-menu" role="menu"><button role="menuitem" onClick={onShare}><span>↗</span> Comparteix</button><button role="menuitem" onClick={() => action("Enllaç copiat")}><span>⌁</span> Copia l’enllaç</button><hr/><button role="menuitem" onClick={() => action("Element canviat de nom")}><span>✎</span> Canvia el nom</button><button role="menuitem" onClick={() => action("Element mogut")}><span>↳</span> Mou a una carpeta</button>{kind === "project" && <button role="menuitem" onClick={() => action("Projecte duplicat")}><span>⧉</span> Duplica</button>}<hr/>{kind === "project" && <button role="menuitem" onClick={() => action("Exportació preparada")}><span>↓</span> Baixa</button>}<button className="danger" role="menuitem" onClick={() => action("Element mogut a la paperera")}><span>⌫</span> Mou a la paperera</button></div>;
-}
-
-function ShareDialog({ target, onClose }: { target: string; onClose: () => void }) {
-  const [permission, setPermission] = useState("Pot editar");
-  return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><section className="share-dialog" role="dialog" aria-modal="true" aria-labelledby="share-title" onMouseDown={(event) => event.stopPropagation()}><header><div><small>COMPARTEIX</small><h2 id="share-title">{target}</h2></div><button onClick={onClose} aria-label="Tanca">×</button></header><div className="share-field"><label>Persones o grups</label><div><input autoFocus type="email" placeholder="nom@organitzacio.cat"/><select value={permission} onChange={(event) => setPermission(event.target.value)}><option>Pot editar</option><option>Pot visualitzar</option></select></div><textarea rows={3} placeholder="Afegeix un missatge (opcional)"/></div><button className="send-share" onClick={() => { alert(`Invitació preparada amb el permís: ${permission}.`); onClose(); }}>Envia la invitació</button><div className="share-divider"><span>o comparteix un enllaç</span></div><div className="link-share"><div><b>Només persones convidades</b><small>Caldrà iniciar sessió per accedir-hi</small></div><button onClick={() => alert("Enllaç copiat")}>⌁ Copia l’enllaç</button></div><footer><span className="avatar-stack"><i>MG</i><i>+</i></span><button>Gestiona l’accés</button></footer></section></div>;
-}
-
-function ContactPage() {
-  return <main className="contact-page"><section><span className="eyebrow">CONTACTE</span><h1>Parlem del teu<br/>sistema d’horaris.</h1><p>Explica’ns com treballeu ara, quins formats utilitzeu i quantes línies gestioneu. T’ajudarem a plantejar la millor automatització.</p><div className="contact-details"><div><small>CORREU</small><b>hola@emma.cat</b></div><div><small>ÀMBIT</small><b>Transport públic · Catalunya</b></div></div></section><form onSubmit={(e)=>{e.preventDefault(); alert("Missatge desat localment. Connectarem l’enviament quan activem el backend.");}}><div className="two"><label><span>Nom</span><input required placeholder="El teu nom" /></label><label><span>Organització</span><input placeholder="Empresa o administració" /></label></div><label><span>Correu electrònic</span><input required type="email" placeholder="nom@organitzacio.cat" /></label><label><span>En què et podem ajudar?</span><select><option>Vull conèixer Emma</option><option>Necessito automatitzar horaris</option><option>Vull aportar dades GTFS</option><option>Altres</option></select></label><label><span>Missatge</span><textarea required rows={6} placeholder="Explica’ns breument el projecte…" /></label><label className="privacy"><input type="checkbox" required /> He llegit i accepto la política de privacitat.</label><button className="cta" type="submit">Envia el missatge <span>→</span></button></form></main>;
 }
 
 function Field({ label, value, onChange }: { label: string; value: string; onChange: (s: string) => void }) {
