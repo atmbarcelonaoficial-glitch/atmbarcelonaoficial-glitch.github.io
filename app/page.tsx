@@ -152,6 +152,7 @@ export default function Home() {
   const [importNotes, setImportNotes] = useState<string[]>([]);
   const [importedTrips, setImportedTrips] = useState(0);
   const [batchPrint, setBatchPrint] = useState(false);
+  const [zoom, setZoom] = useState(78);
   const [allPeriodImports, setAllPeriodImports] = useState<LineImport[]>([]);
   const [newProjectDialog, setNewProjectDialog] = useState(false);
   const [savedSnapshot, setSavedSnapshot] = useState("");
@@ -409,6 +410,7 @@ export default function Home() {
     setImportNotes([]);
     setImportedTrips(0);
     setAllPeriodImports([]);
+    setZoom(78);
     setSavedSnapshot("");
     setNewProjectDialog(false);
   };
@@ -516,11 +518,15 @@ export default function Home() {
 
         <section className="canvas-area">
           <div className="canvas-toolbar">
-            <div><button>−</button><span>78%</span><button>＋</button></div>
+            <div className="zoom-controls">
+              <button onClick={() => setZoom((value) => Math.max(40, value - 10))} disabled={zoom <= 40} aria-label="Redueix el zoom" title="Redueix el zoom">−</button>
+              <span aria-live="polite">{zoom}%</span>
+              <button onClick={() => setZoom((value) => Math.min(148, value + 10))} disabled={zoom >= 148} aria-label="Augmenta el zoom" title="Augmenta el zoom">＋</button>
+            </div>
             <span>{layoutNames[layout]} · {effectiveCircular ? "Circular" : "Normal"} · {useFrequency ? "Freqüències" : "Exacte"}</span>
-            <div><button>⌗</button><button>↗</button></div>
+            <div><button onClick={() => setZoom(78)} aria-label="Ajusta el full a la vista" title="Ajusta el full a la vista">⌗</button><button>↗</button></div>
           </div>
-          <div className={`paper-stack layout-${effectiveLayout}${stops.length ? "" : " empty-project-canvas"}`}>
+          <div className={`paper-stack layout-${effectiveLayout}${stops.length ? "" : " empty-project-canvas"}`} style={{ "--preview-zoom": zoom / 100 } as React.CSSProperties}>
             {!stops.length ? <article className="timetable empty-timetable">
               <div className="empty-sheet-upload">
                 <span className="empty-sheet-icon" aria-hidden="true">↑</span>

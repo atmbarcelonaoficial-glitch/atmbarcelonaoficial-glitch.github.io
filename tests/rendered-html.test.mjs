@@ -45,6 +45,9 @@ test("keeps GTFS import, adaptive templates and pagination connected", async () 
   assert.match(page, /function paginate/);
   assert.match(page, /function FrequencyTable/);
   assert.match(page, /detectedCircular/);
+  assert.match(page, /setZoom/);
   assert.match(css, /paper-stack/);
+  assert.match(css, /panel-scroll[^}]*overflow-y:auto/);
+  assert.match(css, /--preview-zoom/);
   assert.match(css, /break-after:\s*page/);
 });
