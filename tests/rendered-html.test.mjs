@@ -39,6 +39,7 @@ test("keeps GTFS import, adaptive templates and pagination connected", async () 
   assert.match(gtfs, /discoverGtfsFeeds/);
   assert.match(gtfs, /importLine/);
   assert.match(gtfs, /route_type/);
+  assert.match(gtfs, /routeLongName:\s*route\.longName/);
   assert.match(page, /A4 · recorregut \+ horaris/);
   assert.match(page, /A4 · horaris complets/);
   assert.doesNotMatch(page, /Auto · recomanat|Mig A4 · línia/);
@@ -48,6 +49,12 @@ test("keeps GTFS import, adaptive templates and pagination connected", async () 
   assert.match(page, /function FrequencyTable/);
   assert.match(page, /detectedCircular/);
   assert.match(page, /circular-current-tag/);
+  assert.match(page, /Visió general/);
+  assert.match(page, /setGeneralView/);
+  assert.match(page, /overview:\s*true/);
+  assert.match(page, /leftLogoRef/);
+  assert.match(page, /footer-accordion/);
+  assert.match(page, /lineTitle \|\| \[origin, destination\]/);
   assert.match(page, /setZoom/);
   assert.match(css, /paper-stack/);
   assert.match(css, /panel-scroll[^}]*overflow-y:auto/);

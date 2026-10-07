@@ -60,6 +60,7 @@ export type LineStop = { code: string; name: string; times: string[] };
 export type LineImport = {
   stops: LineStop[];
   lineCode: string;
+  routeLongName: string;
   lineColor: string;
   lineTextColor: "white" | "black";
   origin: string;
@@ -406,6 +407,7 @@ export function importLine(dataset: GtfsDataset, routeId: string, direction: str
   return {
     stops: importedStops,
     lineCode: publicCode(route),
+    routeLongName: route.longName || [first, headsign || last].filter(Boolean).join(" — "),
     lineColor: color,
     lineTextColor: textColor,
     origin: circular ? (route.longName.replace(/^\s*\([^)]+\)\s*/, "") || first) : first,

@@ -138,6 +138,7 @@ export default function Home() {
   const [gradient, setGradient] = useState(true);
   const [current, setCurrent] = useState(0);
   const [lineCode, setLineCode] = useState("");
+  const [lineTitle, setLineTitle] = useState("");
   const [lineColor, setLineColor] = useState("#93D500");
   const [hexDraft, setHexDraft] = useState("#93D500");
   const [customColorOpen, setCustomColorOpen] = useState(false);
@@ -151,9 +152,14 @@ export default function Home() {
   const [contact, setContact] = useState("");
   const [infoUrl, setInfoUrl] = useState("");
   const [accessible, setAccessible] = useState(true);
+  const [generalView, setGeneralView] = useState(false);
+  const [leftLogo, setLeftLogo] = useState("");
+  const [rightLogo, setRightLogo] = useState("");
   const [activeTab, setActiveTab] = useState<"design" | "data">("data");
   const fileRef = useRef<HTMLInputElement>(null);
   const legacyFileRef = useRef<HTMLInputElement>(null);
+  const leftLogoRef = useRef<HTMLInputElement>(null);
+  const rightLogoRef = useRef<HTMLInputElement>(null);
   const [feedOptions, setFeedOptions] = useState<GtfsFeedOption[]>([]);
   const [dataset, setDataset] = useState<GtfsDataset | null>(null);
   const [selectedRoute, setSelectedRoute] = useState("");
@@ -171,10 +177,10 @@ export default function Home() {
   const [savedSnapshot, setSavedSnapshot] = useState("");
 
   const projectData = useMemo(() => ({
-    stops, layout, routeShape, scheduleMode, kind, night, gradient, current, lineCode,
+    stops, layout, routeShape, scheduleMode, kind, night, gradient, current, lineCode, lineTitle,
     lineColor, badgeInk, origin, destination, period, periodMode, operator, validity,
-    contact, infoUrl, accessible,
-  }), [stops, layout, routeShape, scheduleMode, kind, night, gradient, current, lineCode, lineColor, badgeInk, origin, destination, period, periodMode, operator, validity, contact, infoUrl, accessible]);
+    contact, infoUrl, accessible, generalView, leftLogo, rightLogo,
+  }), [stops, layout, routeShape, scheduleMode, kind, night, gradient, current, lineCode, lineTitle, lineColor, badgeInk, origin, destination, period, periodMode, operator, validity, contact, infoUrl, accessible, generalView, leftLogo, rightLogo]);
   const projectSnapshot = useMemo(() => JSON.stringify(projectData), [projectData]);
   const hasProjectData = stops.length > 0 || Boolean(lineCode.trim() || origin.trim() || destination.trim() || operator.trim());
   const isDirty = hasProjectData && projectSnapshot !== savedSnapshot;
@@ -209,19 +215,22 @@ export default function Home() {
     : [{ label: period, stops, notes: importNotes }], [periodMode, allPeriodImports, period, stops, importNotes]);
   const pages = useMemo(() => periodVariants.flatMap((variant) => {
     const selected = stops[current];
-    const variantCurrent = Math.max(0, variant.stops.findIndex((stop) => (selected?.code && stop.code === selected.code) || stop.name === selected?.name));
+    const variantCurrent = generalView ? -1 : Math.max(0, variant.stops.findIndex((stop) => (selected?.code && stop.code === selected.code) || stop.name === selected?.name));
     return paginate(variant.stops, variantCurrent, effectiveLayout, useFrequency);
-  }), [periodVariants, stops, current, effectiveLayout, useFrequency]);
+  }), [periodVariants, stops, current, generalView, effectiveLayout, useFrequency]);
   const renderedVersions = useMemo(() => batchPrint
-    ? periodVariants.flatMap((variant) => variant.stops.flatMap((stop, stopIndex) => paginate(variant.stops, stopIndex, effectiveLayout, useFrequency).map((page) => ({ page, stop, stopIndex, periodLabel: variant.label, periodNotes: variant.notes }))))
+    ? periodVariants.flatMap((variant) => [
+      ...paginate(variant.stops, -1, effectiveLayout, useFrequency).map((page) => ({ page, stop: undefined, stopIndex: -1, overview: true, periodLabel: variant.label, periodNotes: variant.notes })),
+      ...variant.stops.flatMap((stop, stopIndex) => paginate(variant.stops, stopIndex, effectiveLayout, useFrequency).map((page) => ({ page, stop, stopIndex, overview: false, periodLabel: variant.label, periodNotes: variant.notes }))),
+    ])
     : periodVariants.flatMap((variant) => {
       const selected = stops[current];
-      const stopIndex = Math.max(0, variant.stops.findIndex((stop) => (selected?.code && stop.code === selected.code) || stop.name === selected?.name));
-      return paginate(variant.stops, stopIndex, effectiveLayout, useFrequency).map((page) => ({ page, stop: variant.stops[stopIndex], stopIndex, periodLabel: variant.label, periodNotes: variant.notes }));
-    }), [batchPrint, periodVariants, stops, current, effectiveLayout, useFrequency]);
+      const stopIndex = generalView ? -1 : Math.max(0, variant.stops.findIndex((stop) => (selected?.code && stop.code === selected.code) || stop.name === selected?.name));
+      return paginate(variant.stops, stopIndex, effectiveLayout, useFrequency).map((page) => ({ page, stop: stopIndex >= 0 ? variant.stops[stopIndex] : undefined, stopIndex, overview: generalView, periodLabel: variant.label, periodNotes: variant.notes }));
+    }), [batchPrint, periodVariants, stops, current, generalView, effectiveLayout, useFrequency]);
   const directionOptions = dataset ? directionsFor(dataset, selectedRoute) : [];
   const serviceOptions = dataset ? servicesFor(dataset, selectedRoute, selectedDirection) : [];
-  const versionCount = periodVariants.reduce((total, variant) => total + variant.stops.length, 0);
+  const versionCount = stops.length ? periodVariants.reduce((total, variant) => total + variant.stops.length + 1, 0) : 0;
 
   const updateStop = (index: number, key: "name" | "code", value: string) => {
     setStops((old) => old.map((s, i) => i === index ? { ...s, [key]: value } : s));
@@ -248,6 +257,7 @@ export default function Home() {
         setStops(imported.stops);
         setCurrent(0);
         setLineCode(imported.lineCode);
+        setLineTitle(imported.routeLongName);
         setLineColor(imported.lineColor);
         setBadgeInk(imported.lineTextColor);
         setOrigin(imported.origin);
@@ -378,6 +388,25 @@ export default function Home() {
     else alert("No he trobat files vàlides. Usa: codi, parada, 06:20, 06:50…");
   };
 
+  const handleLogo = (side: "left" | "right", file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/") && !/\.svg$/i.test(file.name)) {
+      alert("Puja un logo en format SVG, PNG, JPG o WebP.");
+      return;
+    }
+    if (file.size > 1024 * 1024) {
+      alert("El logo no pot superar 1 MB. Per a millor qualitat i menys pes, prioritza SVG.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const value = typeof reader.result === "string" ? reader.result : "";
+      if (side === "left") setLeftLogo(value);
+      else setRightLogo(value);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const exportVersions = () => {
     setBatchPrint(true);
     window.setTimeout(() => window.print(), 350);
@@ -385,8 +414,12 @@ export default function Home() {
 
   const saveProject = () => {
     if (!hasProjectData) return;
-    localStorage.setItem("emma-project", projectSnapshot);
-    setSavedSnapshot(projectSnapshot);
+    try {
+      localStorage.setItem("emma-project", projectSnapshot);
+      setSavedSnapshot(projectSnapshot);
+    } catch {
+      alert("No s’ha pogut desar el projecte. Redueix el pes dels logos i torna-ho a provar.");
+    }
   };
 
   const resetProject = () => {
@@ -400,6 +433,7 @@ export default function Home() {
     setGradient(true);
     setCurrent(0);
     setLineCode("");
+    setLineTitle("");
     setLineColor("#93D500");
     setBadgeInk("white");
     setOrigin("");
@@ -411,6 +445,9 @@ export default function Home() {
     setContact("");
     setInfoUrl("");
     setAccessible(true);
+    setGeneralView(false);
+    setLeftLogo("");
+    setRightLogo("");
     setActiveTab("data");
     setFeedOptions([]);
     setDataset(null);
@@ -437,6 +474,8 @@ export default function Home() {
     <main className="app-shell">
       <SiteHeader />
       <input ref={fileRef} type="file" accept=".zip,application/zip" hidden onChange={(event) => handleGtfs(event.target.files?.[0])} />
+      <input ref={leftLogoRef} type="file" accept="image/svg+xml,image/png,image/jpeg,image/webp" hidden onChange={(event) => { handleLogo("left", event.target.files?.[0]); event.currentTarget.value = ""; }} />
+      <input ref={rightLogoRef} type="file" accept="image/svg+xml,image/png,image/jpeg,image/webp" hidden onChange={(event) => { handleLogo("right", event.target.files?.[0]); event.currentTarget.value = ""; }} />
       <header className="topbar editor-subheader">
         <div className="brand">
           <nav className="workspace-path" aria-label="Document actual"><span>Eina d’horaris</span><i>/</i><b>{lineCode || "Nou projecte"}</b></nav>
@@ -479,6 +518,7 @@ export default function Home() {
                 </div>
               </details>
               <Field label="Identificador de línia" value={lineCode} onChange={setLineCode} />
+              <Field label="Nom oficial de la línia (route_long_name)" value={lineTitle} onChange={setLineTitle} />
               <div className="two"><Field label="Origen" value={origin} onChange={setOrigin} /><Field label="Destí" value={destination} onChange={setDestination} /></div>
               <Field label="Operador" value={operator} onChange={setOperator} />
             </section>
@@ -490,6 +530,7 @@ export default function Home() {
               <div className="segmented shape-choice"><button className={routeShape === "auto" ? "on" : ""} onClick={() => setRouteShape("auto")}>Auto</button><button className={routeShape === "normal" ? "on" : ""} onClick={() => setRouteShape("normal")}>Normal</button><button className={routeShape === "circular" ? "on" : ""} onClick={() => setRouteShape("circular")}>Circular</button></div>
               <label className="section-label">Tractament de l’horari</label>
               <div className="segmented shape-choice"><button className={scheduleMode === "auto" ? "on" : ""} onClick={() => setScheduleMode("auto")}>Auto</button><button className={scheduleMode === "exact" ? "on" : ""} onClick={() => setScheduleMode("exact")}>Exacte</button><button className={scheduleMode === "frequency" ? "on" : ""} onClick={() => setScheduleMode("frequency")}>Freqüència</button></div>
+              <div className="toggle-row"><span><b>Visió general</b><small>Sense parada actual ni «ETS AQUÍ»</small></span><button className={`switch ${generalView ? "on" : ""}`} aria-pressed={generalView} onClick={() => setGeneralView(!generalView)}><i /></button></div>
               <div className="toggle-row"><span><b>Mode de servei</b><small>{night ? "Nocturn" : "Diürn"}</small></span><button className={`switch ${night ? "on" : ""}`} onClick={() => setNight(!night)}><i /></button></div>
               <div className="toggle-row"><span><b>Capçalera corporativa</b><small>{gradient ? "Degradat 3285 → 2299" : "Vermell corporatiu"}</small></span><button className={`switch ${gradient ? "on" : ""}`} onClick={() => setGradient(!gradient)}><i /></button></div>
             </section>
@@ -500,13 +541,22 @@ export default function Home() {
               {periodMode === "single" && <select value={period} onChange={(e) => setPeriod(e.target.value)}><option>Dilluns a divendres feiners</option><option>Dissabtes feiners</option><option>Diumenges i festius</option><option>Servei especial</option></select>}
             </section>
 
-            <section className="tool-block">
-              <h3>Footer</h3>
-              <Field label="Darrera actualització" value={validity} onChange={setValidity} />
-              <div className="two"><Field label="Web" value={infoUrl} onChange={setInfoUrl} /><Field label="Telèfon" value={contact} onChange={setContact} /></div>
-              <div className="toggle-row"><span><b>Servei accessible</b><small>Mostra informació PMR</small></span><button className={`switch ${accessible ? "on" : ""}`} onClick={() => setAccessible(!accessible)}><i /></button></div>
-            </section>
             <div className="info-card"><b>Sistema modular</b><p>Els blocs buits desapareixen i la composició redistribueix l’espai automàticament.</p></div>
+            <section className="tool-block footer-tool">
+              <details className="footer-accordion">
+                <summary>Footer</summary>
+                <div className="footer-accordion-body">
+                  <label className="section-label first-section">Logos</label>
+                  <div className="footer-logo-controls">
+                    <button onClick={() => leftLogoRef.current?.click()}>{leftLogo ? <img src={leftLogo} alt="Logo esquerre" /> : <><span>＋</span><small>Logo esquerre</small></>}</button>
+                    <button onClick={() => rightLogoRef.current?.click()}>{rightLogo ? <img src={rightLogo} alt="Logo dret" /> : <><span>＋</span><small>Logo dret</small></>}</button>
+                  </div>
+                  <Field label="Darrera actualització" value={validity} onChange={setValidity} />
+                  <div className="two"><Field label="Web" value={infoUrl} onChange={setInfoUrl} /><Field label="Telèfon" value={contact} onChange={setContact} /></div>
+                  <div className="toggle-row"><span><b>Servei accessible</b><small>Mostra informació PMR</small></span><button className={`switch ${accessible ? "on" : ""}`} onClick={() => setAccessible(!accessible)}><i /></button></div>
+                </div>
+              </details>
+            </section>
           </div> : <div className="panel-scroll data-panel">
             <div className="gtfs-intro"><span>01 · FONT DE DADES</span><h3>Importa el GTFS</h3><p>Emma detecta línies, sentits, períodes, recorreguts circulars i densitat d’horaris.</p></div>
             <button className={`upload gtfs-upload ${gtfsStatus === "reading" ? "is-reading" : ""}`} onClick={() => fileRef.current?.click()} disabled={gtfsStatus === "reading"}><span>{gtfsStatus === "reading" ? "…" : "↑"}</span><b>{gtfsStatus === "reading" ? "Analitzant el GTFS" : "Puja un fitxer GTFS.zip"}</b><small>El processament es fa localment al navegador</small></button>
@@ -520,7 +570,7 @@ export default function Home() {
             <details className="legacy-import"><summary>Importació manual de suport</summary><button className="upload" onClick={() => legacyFileRef.current?.click()}><span>↑</span><b>Puja CSV o Excel</b><small>Només per a dades sense GTFS</small></button><input ref={legacyFileRef} type="file" accept=".csv,.xlsx,.xls" hidden onChange={(e) => handleFile(e.target.files?.[0])} /></details>
             <div className="stop-editor-head"><b>Parades</b><span>{stops.length} parades</span></div>
             {stops.map((stop, i) => <div className={`stop-editor ${i === current ? "current" : ""}`} key={i}>
-              <button className="select-stop" onClick={() => setCurrent(i)} aria-label={`Marca ${stop.name} com a parada actual`}>{i === current ? "●" : "○"}</button>
+              <button className="select-stop" onClick={() => { setCurrent(i); setGeneralView(false); }} aria-label={`Marca ${stop.name} com a parada actual`}>{i === current && !generalView ? "●" : "○"}</button>
               <input value={stop.code} onChange={(e) => updateStop(i, "code", e.target.value)} />
               <input value={stop.name} onChange={(e) => updateStop(i, "name", e.target.value)} />
               <button className="remove-stop" onClick={() => removeStop(i)} disabled={stops.length <= 1} aria-label={`Elimina la parada ${stop.name}`} title="Elimina la parada">×</button>
@@ -549,14 +599,16 @@ export default function Home() {
                 <button onClick={() => fileRef.current?.click()}>Puja un GTFS.zip <span>→</span></button>
                 <em>El fitxer es processa localment al navegador</em>
               </div>
-            </article></div> : renderedVersions.map(({ page, stop, stopIndex, periodLabel, periodNotes }, versionIndex) => <TimetablePage
+            </article></div> : renderedVersions.map(({ page, stop, stopIndex, overview, periodLabel, periodNotes }, versionIndex) => <TimetablePage
               key={`${versionIndex}-${stopIndex}-${page.stopOffset}-${page.tripOffset}`}
               page={page}
               layout={effectiveLayout}
               circular={effectiveCircular}
               frequency={useFrequency}
               currentStop={stop}
+              overview={overview}
               lineCode={lineCode}
+              lineTitle={lineTitle}
               lineColor={lineColor}
               badgeInk={badgeInk}
               origin={origin}
@@ -570,6 +622,10 @@ export default function Home() {
               infoUrl={infoUrl}
               contact={contact}
               accessible={accessible}
+              leftLogo={leftLogo}
+              rightLogo={rightLogo}
+              onLeftLogoClick={() => leftLogoRef.current?.click()}
+              onRightLogoClick={() => rightLogoRef.current?.click()}
             />)}
           </div>
         </section>
@@ -591,13 +647,15 @@ export default function Home() {
   );
 }
 
-function TimetablePage({ page, layout, circular, frequency, currentStop, lineCode, lineColor, badgeInk, origin, destination, operator, validity, period, night, gradient, notes, infoUrl, contact, accessible }: {
+function TimetablePage({ page, layout, circular, frequency, currentStop, overview, lineCode, lineTitle, lineColor, badgeInk, origin, destination, operator, validity, period, night, gradient, notes, infoUrl, contact, accessible, leftLogo, rightLogo, onLeftLogoClick, onRightLogoClick }: {
   page: PagePlan;
   layout: Layout;
   circular: boolean;
   frequency: boolean;
   currentStop?: Stop;
+  overview: boolean;
   lineCode: string;
+  lineTitle: string;
   lineColor: string;
   badgeInk: BadgeInk;
   origin: string;
@@ -611,29 +669,33 @@ function TimetablePage({ page, layout, circular, frequency, currentStop, lineCod
   infoUrl: string;
   contact: string;
   accessible: boolean;
+  leftLogo: string;
+  rightLogo: string;
+  onLeftLogoClick: () => void;
+  onRightLogoClick: () => void;
 }) {
   const trips = useMemo(() => {
     const max = Math.max(...page.stops.map((stop) => stop.times.length), 0);
     return Array.from({ length: max }, (_, trip) => page.stops.map((stop) => stop.times[trip] || "—"));
   }, [page.stops]);
-  const currentTimes = currentStop?.times || [];
+  const currentTimes = currentStop?.times || page.stops[0]?.times || [];
   return <div className={`paper-wrap layout-${layout}`}>
-    <article className={`timetable ${night ? "night" : ""} ${gradient ? "gradient" : "red"}`} style={{ "--line": lineColor, "--line-ink": contrastText(lineColor), "--pastel": `color-mix(in srgb, ${lineColor} 24%, white)` } as React.CSSProperties}>
+    <article className={`timetable ${night ? "night" : ""} ${gradient ? "gradient" : "red"}${overview ? " overview-version" : ""}`} style={{ "--line": lineColor, "--line-ink": contrastText(lineColor), "--pastel": `color-mix(in srgb, ${lineColor} 24%, white)` } as React.CSSProperties}>
       <header className="sheet-header">
-        <div className="route-title"><div className="line-badge" style={{ background: lineColor, color: badgeInk === "white" ? "#ffffff" : "#111111" }}>{lineCode}</div><div><span className="operator-line"><small>OPERAT PER</small><b>{operator.toUpperCase()}</b></span><h1>{origin} <i>→</i> {destination}</h1><p>{validity}</p></div></div>
-        <div className="stop-code"><small>CODI DE PARADA</small><b>{currentStop?.code || "—"}</b></div>
+        <div className="route-title"><div className="line-badge" style={{ background: lineColor, color: badgeInk === "white" ? "#ffffff" : "#111111" }}>{lineCode}</div><div><span className="operator-line"><small>OPERAT PER</small><b>{operator.toUpperCase()}</b></span><h1>{lineTitle || [origin, destination].filter(Boolean).join(" — ")}</h1><p>{validity}</p></div></div>
+        {!overview && <div className="stop-code"><small>CODI DE PARADA</small><b>{currentStop?.code || "—"}</b></div>}
       </header>
       {page.total > 1 && <div className="continuation"><span><strong>{page.page === 1 ? "INICI" : "CONTINUACIÓ"}</strong>{page.section}</span><b>Pàgina {page.page} / {page.total}</b></div>}
       <div className="sheet-body">
         {layout !== "table" && <RouteDiagram stops={page.stops} current={page.current} circle={circular} color={lineColor} />}
         <div className="schedule-area">
-          <div className="you-are"><i className="stop-marker-icon" aria-hidden="true" /><b>{currentStop?.name}</b><HereTag /></div>
+          {!overview && currentStop && <div className="you-are"><i className="stop-marker-icon" aria-hidden="true" /><b>{currentStop.name}</b><HereTag /></div>}
           <div className="schedule-title"><div><small>{frequency ? "FREQÜÈNCIES ORIENTATIVES" : "HORARIS DE PAS APROXIMATS"}</small><h2>{period}</h2></div><span>{night ? "☾" : "☀"} {night ? "Servei nocturn" : "Servei diürn"}</span></div>
-          {frequency ? <FrequencyTable times={currentTimes} /> : <ScheduleTable stops={page.stops} trips={trips} current={page.current} showHereLabel />}
+          {frequency ? <FrequencyTable times={currentTimes} /> : <ScheduleTable stops={page.stops} trips={trips} current={page.current} showHereLabel={!overview} />}
           <div className="notes"><b>Informació important</b><p>{notes[0] || "Els horaris estan subjectes a les incidències i contratemps de la via pública. Consulta les alteracions del servei abans de viatjar."}</p></div>
         </div>
       </div>
-      <footer className="sheet-footer"><div className="logo-slot">LOGO ESQUERRA</div><p><b>{infoUrl}</b><br/>Informació: {contact}{accessible ? " · ♿ Servei accessible" : ""}</p><div className="logo-slot right">LOGO DRETA</div></footer>
+      <footer className="sheet-footer"><button type="button" className={`logo-slot ${leftLogo ? "has-logo" : "empty"}`} onClick={onLeftLogoClick} aria-label="Puja o canvia el logo esquerre">{leftLogo ? <img src={leftLogo} alt="Logo esquerre" /> : <span>＋ AFEGEIX LOGO</span>}</button><p><b>{infoUrl}</b><br/>Informació: {contact}{accessible ? " · ♿ Servei accessible" : ""}</p><button type="button" className={`logo-slot right ${rightLogo ? "has-logo" : "empty"}`} onClick={onRightLogoClick} aria-label="Puja o canvia el logo dret">{rightLogo ? <img src={rightLogo} alt="Logo dret" /> : <span>＋ AFEGEIX LOGO</span>}</button></footer>
     </article>
   </div>;
 }
