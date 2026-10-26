@@ -36,9 +36,12 @@ export type GtfsDataset = {
   trips: GtfsTrip[];
   stops: Map<string, GtfsStop>;
   serviceLabels: Map<string, string>;
+  serviceMeta: Map<string, GtfsServiceMeta>;
   agencies: Map<string, string>;
+  frequencyTripIds: Set<string>;
   stopTimesText: string;
   notesText: string;
+  warnings: string[];
   diagnostics: {
     routes: number;
     trips: number;
@@ -47,7 +50,15 @@ export type GtfsDataset = {
     hasColors: boolean;
     hasAccessibility: boolean;
     hasNamedPeriods: boolean;
+    hasFrequencies: boolean;
   };
+};
+
+export type GtfsServiceMeta = {
+  startDate: string;
+  endDate: string;
+  addedDates: number;
+  removedDates: number;
 };
 
 export type GtfsFeedOption = {
@@ -55,7 +66,13 @@ export type GtfsFeedOption = {
   bytes: Uint8Array;
 };
 
-export type LineStop = { code: string; name: string; times: string[] };
+export type LineStop = {
+  code: string;
+  name: string;
+  times: string[];
+  sourceKey?: string;
+  sourceStopId?: string;
+};
 
 export type LineImport = {
   stops: LineStop[];
@@ -75,6 +92,7 @@ export type LineImport = {
   patternCount: number;
   notes: string[];
   warnings: string[];
+  frequencyBased: boolean;
 };
 
 const decoder = new TextDecoder("utf-8");
@@ -178,6 +196,48 @@ function csvRows(text: string) {
   return rows;
 }
 
+function csvHeaders(text: string) {
+  if (!text) return [];
+  const end = text.indexOf("\n");
+  return parseLine(text.slice(0, end < 0 ? text.length : end)).map((header) => header.trim());
+}
+
+function validateGtfsEntries(entries: Record<string, Uint8Array>) {
+  const requirements: Record<string, string[]> = {
+    "agency.txt": ["agency_name", "agency_url", "agency_timezone"],
+    "routes.txt": ["route_id", "route_type"],
+    "trips.txt": ["route_id", "service_id", "trip_id"],
+    "stops.txt": ["stop_id", "stop_name"],
+    "stop_times.txt": ["trip_id", "arrival_time", "departure_time", "stop_id", "stop_sequence"],
+  };
+  const errors: string[] = [];
+  Object.entries(requirements).forEach(([file, columns]) => {
+    if (!entries[file]) {
+      errors.push(`Falta ${file}`);
+      return;
+    }
+    const headers = new Set(csvHeaders(decode(entries[file])));
+    const missing = columns.filter((column) => !headers.has(column));
+    if (missing.length) errors.push(`${file}: falten ${missing.join(", ")}`);
+  });
+
+  const hasCalendar = Boolean(entries["calendar.txt"]);
+  const hasCalendarDates = Boolean(entries["calendar_dates.txt"]);
+  if (!hasCalendar && !hasCalendarDates) errors.push("Falta calendar.txt o calendar_dates.txt");
+  if (hasCalendar) {
+    const headers = new Set(csvHeaders(decode(entries["calendar.txt"])));
+    const requiredCalendar = ["service_id", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "start_date", "end_date"];
+    const missing = requiredCalendar.filter((column) => !headers.has(column));
+    if (missing.length) errors.push(`calendar.txt: falten ${missing.join(", ")}`);
+  }
+  if (hasCalendarDates) {
+    const headers = new Set(csvHeaders(decode(entries["calendar_dates.txt"])));
+    const missing = ["service_id", "date", "exception_type"].filter((column) => !headers.has(column));
+    if (missing.length) errors.push(`calendar_dates.txt: falten ${missing.join(", ")}`);
+  }
+  if (errors.length) throw new Error(`GTFS incomplet. ${errors.join(" · ")}.`);
+}
+
 function formatDate(value: string) {
   if (!/^\d{8}$/.test(value)) return value;
   return `${value.slice(6, 8)}.${value.slice(4, 6)}.${value.slice(0, 4)}`;
@@ -202,6 +262,8 @@ function calendarLabel(row: Record<string, string>) {
 
 export function parseGtfsFeed(option: GtfsFeedOption): GtfsDataset {
   const entries = unzipGtfs(option.bytes);
+  validateGtfsEntries(entries);
+  const validationWarnings: string[] = [];
   const agencies = new Map<string, string>();
   let defaultAgency = "Operador de transport";
   csvRows(decode(entries["agency.txt"])).forEach((row, index) => {
@@ -211,7 +273,8 @@ export function parseGtfsFeed(option: GtfsFeedOption): GtfsDataset {
     if (index === 0) defaultAgency = name;
   });
 
-  const allRoutes = csvRows(decode(entries["routes.txt"])).map((row): GtfsRoute => ({
+  const allRouteRows = csvRows(decode(entries["routes.txt"]));
+  const allRoutes = allRouteRows.filter((row) => row.route_id).map((row): GtfsRoute => ({
     id: row.route_id,
     agencyId: row.agency_id || "0",
     shortName: row.route_short_name || "",
@@ -224,8 +287,9 @@ export function parseGtfsFeed(option: GtfsFeedOption): GtfsDataset {
   const routes = buses.length ? buses : allRoutes;
   const routeIds = new Set(routes.map((route) => route.id));
 
-  const trips = csvRows(decode(entries["trips.txt"]))
-    .filter((row) => routeIds.has(row.route_id))
+  const allTripRows = csvRows(decode(entries["trips.txt"]));
+  const trips = allTripRows
+    .filter((row) => row.trip_id && row.service_id && routeIds.has(row.route_id))
     .map((row): GtfsTrip => ({
       id: row.trip_id,
       routeId: row.route_id,
@@ -238,6 +302,7 @@ export function parseGtfsFeed(option: GtfsFeedOption): GtfsDataset {
 
   const stops = new Map<string, GtfsStop>();
   csvRows(decode(entries["stops.txt"])).forEach((row) => {
+    if (!row.stop_id || !row.stop_name) return;
     stops.set(row.stop_id, {
       id: row.stop_id,
       code: row.stop_code && row.stop_code.toLowerCase() !== "null" ? row.stop_code : "",
@@ -247,10 +312,43 @@ export function parseGtfsFeed(option: GtfsFeedOption): GtfsDataset {
   });
 
   const serviceLabels = new Map<string, string>();
-  csvRows(decode(entries["calendar.txt"])).forEach((row) => serviceLabels.set(row.service_id, calendarLabel(row)));
-  csvRows(decode(entries["calendar_dates.txt"])).forEach((row) => {
-    if (!serviceLabels.has(row.service_id)) serviceLabels.set(row.service_id, "Calendari especial");
+  const serviceMeta = new Map<string, GtfsServiceMeta>();
+  csvRows(decode(entries["calendar.txt"])).forEach((row) => {
+    if (!row.service_id) return;
+    serviceLabels.set(row.service_id, calendarLabel(row));
+    serviceMeta.set(row.service_id, {
+      startDate: row.start_date || "",
+      endDate: row.end_date || "",
+      addedDates: 0,
+      removedDates: 0,
+    });
   });
+  csvRows(decode(entries["calendar_dates.txt"])).forEach((row) => {
+    if (!row.service_id) return;
+    if (!serviceLabels.has(row.service_id)) serviceLabels.set(row.service_id, "Calendari especial");
+    const meta = serviceMeta.get(row.service_id) || { startDate: row.date || "", endDate: row.date || "", addedDates: 0, removedDates: 0 };
+    if (row.date && (!meta.startDate || row.date < meta.startDate)) meta.startDate = row.date;
+    if (row.date && (!meta.endDate || row.date > meta.endDate)) meta.endDate = row.date;
+    if (row.exception_type === "1") meta.addedDates += 1;
+    if (row.exception_type === "2") meta.removedDates += 1;
+    serviceMeta.set(row.service_id, meta);
+  });
+
+  const knownTripIds = new Set(allTripRows.map((row) => row.trip_id).filter(Boolean));
+  const knownStopIds = new Set(stops.keys());
+  let orphanStopTimes = 0;
+  let invalidSequences = 0;
+  eachCsvRow(decode(entries["stop_times.txt"]), (row) => {
+    if (!knownTripIds.has(row.trip_id) || !knownStopIds.has(row.stop_id)) orphanStopTimes += 1;
+    if (!Number.isFinite(Number(row.stop_sequence))) invalidSequences += 1;
+  });
+  if (orphanStopTimes) validationWarnings.push(`${orphanStopTimes} registres de stop_times.txt fan referència a viatges o parades inexistents`);
+  if (invalidSequences) validationWarnings.push(`${invalidSequences} registres tenen un stop_sequence invàlid`);
+  if (!routes.length) throw new Error("El GTFS no conté cap línia utilitzable.");
+  if (!trips.length) throw new Error("El GTFS no conté cap expedició utilitzable per a les línies detectades.");
+  if (!stops.size) throw new Error("El GTFS no conté cap parada utilitzable.");
+
+  const frequencyTripIds = new Set(csvRows(decode(entries["frequencies.txt"])).map((row) => row.trip_id).filter(Boolean));
 
   const feedInfo = csvRows(decode(entries["feed_info.txt"]))[0] || {};
   const updated = formatDate(feedInfo.feed_version || feedInfo.feed_end_date || "");
@@ -263,9 +361,12 @@ export function parseGtfsFeed(option: GtfsFeedOption): GtfsDataset {
     trips,
     stops,
     serviceLabels,
+    serviceMeta,
     agencies,
+    frequencyTripIds,
     stopTimesText: decode(entries["stop_times.txt"]),
     notesText: decode(entries["nota.txt"]),
+    warnings: validationWarnings,
     diagnostics: {
       routes: routes.length,
       trips: trips.length,
@@ -274,6 +375,7 @@ export function parseGtfsFeed(option: GtfsFeedOption): GtfsDataset {
       hasColors: routes.some((route) => Boolean(route.color)),
       hasAccessibility: trips.some((trip) => trip.wheelchair === "1"),
       hasNamedPeriods: csvRows(decode(entries["calendar.txt"])).some((row) => Boolean(row.name)),
+      hasFrequencies: frequencyTripIds.size > 0,
     },
   };
 }
@@ -327,16 +429,9 @@ export function importLine(dataset: GtfsDataset, routeId: string, direction: str
   let candidates = dataset.trips.filter((trip) => trip.routeId === routeId && trip.direction === direction && trip.serviceId === serviceId);
   if (!candidates.length) candidates = dataset.trips.filter((trip) => trip.routeId === routeId && trip.direction === direction);
 
-  const shapeCounts = new Map<string, number>();
-  candidates.forEach((trip) => {
-    const key = trip.shapeId || "sense-forma";
-    shapeCounts.set(key, (shapeCounts.get(key) || 0) + 1);
-  });
-  const dominantShape = Array.from(shapeCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
-  if (dominantShape && dominantShape !== "sense-forma") candidates = candidates.filter((trip) => trip.shapeId === dominantShape);
   const candidateIds = new Set(candidates.map((trip) => trip.id));
 
-  type Call = { stopId: string; sequence: number; time: string };
+  type Call = { stopId: string; sequence: number; time: string; key: string };
   const calls = new Map<string, Call[]>();
   eachCsvRow(dataset.stopTimesText, (row) => {
     if (!candidateIds.has(row.trip_id)) return;
@@ -345,10 +440,19 @@ export function importLine(dataset: GtfsDataset, routeId: string, direction: str
       stopId: row.stop_id,
       sequence: Number(row.stop_sequence || list.length),
       time: row.departure_time || row.arrival_time || "",
+      key: "",
     });
     calls.set(row.trip_id, list);
   });
-  calls.forEach((list) => list.sort((a, b) => a.sequence - b.sequence));
+  calls.forEach((list) => {
+    list.sort((a, b) => a.sequence - b.sequence);
+    const occurrences = new Map<string, number>();
+    list.forEach((call) => {
+      const occurrence = (occurrences.get(call.stopId) || 0) + 1;
+      occurrences.set(call.stopId, occurrence);
+      call.key = `${call.stopId}\u001e${occurrence}`;
+    });
+  });
 
   const patterns = new Map<string, { ids: string[]; trips: string[] }>();
   calls.forEach((list, tripId) => {
@@ -358,19 +462,24 @@ export function importLine(dataset: GtfsDataset, routeId: string, direction: str
     pattern.trips.push(tripId);
     patterns.set(key, pattern);
   });
-  const dominant = Array.from(patterns.values()).sort((a, b) => b.trips.length - a.trips.length)[0];
+  const dominant = Array.from(patterns.values()).sort((a, b) => b.ids.length - a.ids.length || b.trips.length - a.trips.length)[0];
   if (!dominant) throw new Error("Aquesta selecció no conté hores de pas.");
-  const tripIds = dominant.trips.sort((a, b) => timeValue(calls.get(a)?.[0]?.time || "") - timeValue(calls.get(b)?.[0]?.time || ""));
+  const tripIds = candidates.map((trip) => trip.id).filter((tripId) => calls.has(tripId))
+    .sort((a, b) => timeValue(calls.get(a)?.[0]?.time || "") - timeValue(calls.get(b)?.[0]?.time || ""));
   const closesAtOrigin = dominant.ids.length > 2 && dominant.ids[0] === dominant.ids[dominant.ids.length - 1];
   const circular = closesAtOrigin || /circular/i.test(route.longName) || candidates.some((trip) => /circular/i.test(trip.headsign));
-  const visibleIds = closesAtOrigin ? dominant.ids.slice(0, -1) : dominant.ids;
-  const importedStops = visibleIds.map((stopId, stopIndex): LineStop => {
+  const referenceCalls = calls.get(dominant.trips[0]) || [];
+  const visibleCalls = closesAtOrigin ? referenceCalls.slice(0, -1) : referenceCalls;
+  const importedStops = visibleCalls.map((referenceCall): LineStop => {
+    const stopId = referenceCall.stopId;
     const stop = dataset.stops.get(stopId);
     return {
       code: stop?.code || "",
       name: stop?.name || stopId,
+      sourceKey: referenceCall.key,
+      sourceStopId: stopId,
       times: tripIds.map((tripId) => {
-        const call = calls.get(tripId)?.find((item, index) => index === stopIndex || item.stopId === stopId);
+        const call = calls.get(tripId)?.find((item) => item.key === referenceCall.key);
         return call?.time ? displayTime(call.time) : "—";
       }),
     };
@@ -388,8 +497,8 @@ export function importLine(dataset: GtfsDataset, routeId: string, direction: str
   const warnings: string[] = [];
   if (!selectedTrip?.headsign) warnings.push("Destinació inferida amb les parades terminals");
   if (!route.color) warnings.push("Color corporatiu no informat; s’aplica el verd d’Emma");
-  if (patterns.size > 1) warnings.push(`${patterns.size} variants de recorregut; s’ha seleccionat el patró principal`);
-  if (dominant.trips.length < candidates.length) warnings.push(`${candidates.length - dominant.trips.length} expedicions d’altres variants no es mostren en aquesta peça`);
+  warnings.push(...dataset.warnings);
+  if (patterns.size > 1) warnings.push(`${patterns.size} variants de recorregut integrades; les parades no compartides es mostren amb un guió`);
 
   const notes: string[] = [];
   if (dataset.notesText) {
@@ -397,6 +506,15 @@ export function importLine(dataset: GtfsDataset, routeId: string, direction: str
     eachCsvRow(dataset.notesText, (row) => {
       if ((row.route_id === routeId || selectedIds.has(row.trip_id)) && row.nota && row.nota !== "." && !notes.includes(row.nota)) notes.push(row.nota);
     });
+  }
+  const serviceMeta = dataset.serviceMeta.get(serviceId);
+  const exceptionCount = (serviceMeta?.addedDates || 0) + (serviceMeta?.removedDates || 0);
+  if (serviceMeta && exceptionCount > 0 && exceptionCount <= 20) {
+    const parts = [
+      serviceMeta.addedDates ? `${serviceMeta.addedDates} dies afegits` : "",
+      serviceMeta.removedDates ? `${serviceMeta.removedDates} dies sense servei` : "",
+    ].filter(Boolean);
+    notes.unshift(`Excepcions del calendari: ${parts.join(" · ")}.`);
   }
   const firstTimes = tripIds.map((id) => calls.get(id)?.[0]?.time || "").filter(Boolean);
   const nightTrips = firstTimes.filter((time) => {
@@ -414,7 +532,9 @@ export function importLine(dataset: GtfsDataset, routeId: string, direction: str
     destination: circular ? "Circular" : (headsign || last),
     operator: routeAgency,
     period: dataset.serviceLabels.get(serviceId) || "Servei seleccionat",
-    validity: dataset.updated ? `Darrera actualització: ${dataset.updated}` : "",
+    validity: serviceMeta?.startDate || serviceMeta?.endDate
+      ? `Vigència: ${formatDate(serviceMeta.startDate)} — ${formatDate(serviceMeta.endDate)}`
+      : (dataset.updated ? `Versió GTFS: ${dataset.updated}` : "Vigència no informada"),
     circular,
     night: firstTimes.length > 0 && nightTrips / firstTimes.length > 0.5,
     accessible: candidates.some((trip) => trip.wheelchair === "1"),
@@ -422,5 +542,6 @@ export function importLine(dataset: GtfsDataset, routeId: string, direction: str
     patternCount: patterns.size,
     notes: notes.slice(0, 3),
     warnings,
+    frequencyBased: tripIds.some((tripId) => dataset.frequencyTripIds.has(tripId)),
   };
 }

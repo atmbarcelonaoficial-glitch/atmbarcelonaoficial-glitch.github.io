@@ -36,8 +36,13 @@ test("keeps GTFS import, adaptive templates and pagination connected", async () 
     readFile(new URL("../package.json", import.meta.url), "utf8"),
   ]);
   assert.match(packageJson, /"fflate": "0\.7\.5"/);
+  assert.match(packageJson, /"html2canvas"/);
+  assert.match(packageJson, /"jspdf"/);
   assert.match(gtfs, /discoverGtfsFeeds/);
   assert.match(gtfs, /importLine/);
+  assert.match(gtfs, /validateGtfsEntries/);
+  assert.match(gtfs, /sourceKey/);
+  assert.match(gtfs, /frequencyBased/);
   assert.match(gtfs, /route_type/);
   assert.match(gtfs, /routeLongName:\s*route\.longName/);
   assert.match(page, /A4 · recorregut \+ horaris/);
@@ -47,6 +52,10 @@ test("keeps GTFS import, adaptive templates and pagination connected", async () 
   assert.match(page, /charsPerRow/);
   assert.match(page, /CONTINUACIÓ/);
   assert.match(page, /function FrequencyTable/);
+  assert.match(page, /exportPdf/);
+  assert.match(page, /plantilla-emma\.csv/);
+  assert.match(page, /undoRemoveStop/);
+  assert.match(page, /samePhysicalStop/);
   assert.match(page, /detectedCircular/);
   assert.match(page, /circular-current-tag/);
   assert.match(page, /Visió general/);
@@ -64,6 +73,6 @@ test("keeps GTFS import, adaptive templates and pagination connected", async () 
   assert.match(css, /@page\{size:A4 portrait;margin:0\}/);
   assert.match(css, /width:210mm!important/);
   assert.match(css, /height:297mm!important/);
-  assert.match(css, /\.site-header,.topbar,.sidebar,.canvas-toolbar,.modal-backdrop\{display:none!important\}/);
+  assert.match(css, /\.site-header,.topbar,.sidebar,.canvas-toolbar,.modal-backdrop,.undo-toast\{display:none!important\}/);
   assert.match(css, /paper-stack>\.paper-wrap:before/);
 });
