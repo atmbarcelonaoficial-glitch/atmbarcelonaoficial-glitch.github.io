@@ -211,8 +211,11 @@ export default function Home() {
   const [newProjectDialog, setNewProjectDialog] = useState(false);
   const [savedSnapshot, setSavedSnapshot] = useState("");
   const [editingTimes, setEditingTimes] = useState<number | null>(null);
+  const [draggedStop, setDraggedStop] = useState<number | null>(null);
+  const [dragOverStop, setDragOverStop] = useState<number | null>(null);
   const [lastRemoved, setLastRemoved] = useState<{ stop: Stop; index: number; previousCurrent: number } | null>(null);
   const paperStackRef = useRef<HTMLDivElement>(null);
+  const dragTargetRef = useRef<number | null>(null);
 
   const projectData = useMemo(() => ({
     stops, layout, routeShape, scheduleMode, kind, night, gradient, current, lineCode, lineTitle,
@@ -300,6 +303,38 @@ export default function Home() {
     });
     setCurrent((selected) => selected === index ? target : selected === target ? index : selected);
     setEditingTimes((selected) => selected === index ? target : selected === target ? index : selected);
+  };
+
+  const reorderStop = (from: number, to: number) => {
+    if (from === to || from < 0 || to < 0 || from >= stops.length || to >= stops.length) return;
+    const remapIndex = (selected: number) => {
+      if (selected === from) return to;
+      if (from < to && selected > from && selected <= to) return selected - 1;
+      if (from > to && selected >= to && selected < from) return selected + 1;
+      return selected;
+    };
+    setStops((old) => {
+      const next = [...old];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+    setCurrent(remapIndex);
+    setEditingTimes((selected) => selected === null ? null : remapIndex(selected));
+  };
+
+  const finishStopDrag = () => {
+    dragTargetRef.current = null;
+    setDraggedStop(null);
+    setDragOverStop(null);
+  };
+
+  const trackStopDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const group = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>(".stop-editor-group");
+    const target = Number(group?.dataset.stopIndex);
+    if (!Number.isInteger(target) || target === dragTargetRef.current) return;
+    dragTargetRef.current = target;
+    setDragOverStop(target);
   };
 
   const removeStop = (index: number) => {
@@ -728,8 +763,21 @@ export default function Home() {
             </>}
             <details className="legacy-import"><summary>Importació manual de suport</summary><button className="upload" onClick={() => legacyFileRef.current?.click()}><span>↑</span><b>Importa una plantilla Emma</b><small>CSV o Excel amb una fila per parada</small></button><button className="download-template" onClick={downloadEmmaTemplate}>↓ Descarrega la plantilla CSV</button><input ref={legacyFileRef} type="file" accept=".csv,.xlsx,.xls" hidden onChange={(e) => handleFile(e.target.files?.[0])} /></details>
             <div className="stop-editor-head"><b>Parades</b><span>{stops.length} parades</span></div>
-            {stops.map((stop, i) => <div className="stop-editor-group" key={stop.sourceKey || `${stop.code}-${i}`}>
+            {stops.map((stop, i) => <div
+              className={`stop-editor-group${draggedStop === i ? " is-dragging" : ""}${dragOverStop === i && draggedStop !== i ? " is-drag-over" : ""}`}
+              key={stop.sourceKey || `${stop.code}-${i}`}
+              data-stop-index={i}
+            >
               <div className={`stop-editor ${i === current ? "current" : ""}`}>
+                <button
+                  className="stop-drag-handle"
+                  onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); dragTargetRef.current = i; setDraggedStop(i); setDragOverStop(i); }}
+                  onPointerMove={trackStopDrag}
+                  onPointerUp={(event) => { const target = dragTargetRef.current; if (target !== null) reorderStop(i, target); if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); finishStopDrag(); }}
+                  onPointerCancel={finishStopDrag}
+                  aria-label={`Arrossega per reordenar ${stop.name}`}
+                  title="Arrossega per reordenar"
+                ><span aria-hidden="true">{Array.from({ length: 6 }, (_, dot) => <i key={dot} />)}</span></button>
                 <button className="select-stop" onClick={() => { setCurrent(i); setGeneralView(false); }} aria-label={`Marca ${stop.name} com a parada actual`}>{i === current && !generalView ? "●" : "○"}</button>
                 <input value={stop.code} onChange={(e) => updateStop(i, "code", e.target.value)} aria-label={`Codi de ${stop.name}`} />
                 <input value={stop.name} onChange={(e) => updateStop(i, "name", e.target.value)} aria-label={`Nom de la parada ${i + 1}`} />

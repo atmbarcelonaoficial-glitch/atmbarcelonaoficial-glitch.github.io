@@ -55,6 +55,8 @@ test("keeps GTFS import, adaptive templates and pagination connected", async () 
   assert.match(page, /exportPdf/);
   assert.match(page, /plantilla-emma\.csv/);
   assert.match(page, /undoRemoveStop/);
+  assert.match(page, /reorderStop/);
+  assert.match(page, /stop-drag-handle/);
   assert.match(page, /samePhysicalStop/);
   assert.match(page, /detectedCircular/);
   assert.match(page, /circular-current-tag/);
@@ -75,4 +77,5 @@ test("keeps GTFS import, adaptive templates and pagination connected", async () 
   assert.match(css, /height:297mm!important/);
   assert.match(css, /\.site-header,.topbar,.sidebar,.canvas-toolbar,.modal-backdrop,.undo-toast\{display:none!important\}/);
   assert.match(css, /paper-stack>\.paper-wrap:before/);
+  assert.match(css, /\.stop-drag-handle/);
 });
