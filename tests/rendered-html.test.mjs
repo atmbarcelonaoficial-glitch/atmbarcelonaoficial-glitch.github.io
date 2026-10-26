@@ -64,6 +64,8 @@ test("keeps GTFS import, adaptive templates and pagination connected", async () 
   assert.match(page, /samePhysicalStop/);
   assert.match(page, /detectedCircular/);
   assert.match(page, /circular-current-tag/);
+  assert.match(page, /isTerminal = i === 0 \|\| i === stops\.length - 1/);
+  assert.match(page, /is-terminal/);
   assert.match(page, /Visió general/);
   assert.match(page, /setGeneralView/);
   assert.match(page, /overview:\s*true/);
@@ -82,4 +84,5 @@ test("keeps GTFS import, adaptive templates and pagination connected", async () 
   assert.match(css, /\.site-header,.topbar,.sidebar,.canvas-toolbar,.modal-backdrop,.undo-toast\{display:none!important\}/);
   assert.match(css, /paper-stack>\.paper-wrap:before/);
   assert.match(css, /\.stop-drag-handle/);
+  assert.match(css, /\.route-stop\.is-terminal b/);
 });

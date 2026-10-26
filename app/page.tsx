@@ -982,7 +982,7 @@ function RouteDiagram({ stops, currentStop, circle, color }: { stops: Stop[]; cu
   if (circle) return <CircularRouteDiagram stops={stops} currentStop={currentStop} color={color} />;
   const stopHeight = Math.max(18, Math.min(66, 570 / Math.max(stops.length, 1)));
   const density = stops.length > 24 ? "ultra-dense" : stops.length > 12 ? "dense" : "";
-  return <section className={`route-diagram ${density}`}><div className="diagram-heading"><small>RECORREGUT</small><b>{stops.length} parades</b></div><div className="route-line" style={{ "--route": color, "--stop-height": `${stopHeight}px` } as React.CSSProperties}>{stops.map((s, i) => { const isHere = samePhysicalStop(s, currentStop); return <div className={`route-stop ${isHere ? "here" : ""}`} key={s.sourceKey || i}><i /><div><b>{s.name}</b>{isHere && <HereTag />}</div></div>; })}</div></section>;
+  return <section className={`route-diagram ${density}`}><div className="diagram-heading"><small>RECORREGUT</small><b>{stops.length} parades</b></div><div className="route-line" style={{ "--route": color, "--stop-height": `${stopHeight}px` } as React.CSSProperties}>{stops.map((s, i) => { const isHere = samePhysicalStop(s, currentStop); const isTerminal = i === 0 || i === stops.length - 1; return <div className={`route-stop ${isHere ? "here" : ""} ${isTerminal ? "is-terminal" : ""}`} key={s.sourceKey || i}><i /><div><b>{s.name}</b>{isHere && <HereTag />}</div></div>; })}</div></section>;
 }
 
 function CircularRouteDiagram({ stops, currentStop, color }: { stops: Stop[]; currentStop?: Stop; color: string }) {
