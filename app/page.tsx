@@ -52,6 +52,54 @@ function currentDateLabel() {
   return `Generat: ${value.day}.${value.month}.${value.year}`;
 }
 
+function canvasWithUniformBleed(source: HTMLCanvasElement) {
+  const pixelsPerMm = 6;
+  const bleed = 3 * pixelsPerMm;
+  const trimWidth = 210 * pixelsPerMm;
+  const trimHeight = 297 * pixelsPerMm;
+  const trim = document.createElement("canvas");
+  trim.width = trimWidth;
+  trim.height = trimHeight;
+  const trimContext = trim.getContext("2d");
+  if (!trimContext) throw new Error("No s’ha pogut preparar el full A4.");
+  trimContext.imageSmoothingEnabled = true;
+  trimContext.imageSmoothingQuality = "high";
+  trimContext.drawImage(source, 0, 0, trimWidth, trimHeight);
+
+  const output = document.createElement("canvas");
+  output.width = trimWidth + bleed * 2;
+  output.height = trimHeight + bleed * 2;
+  const context = output.getContext("2d");
+  if (!context) throw new Error("No s’han pogut preparar les sangs del PDF.");
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, output.width, output.height);
+  context.drawImage(trim, bleed, bleed);
+
+  context.drawImage(trim, 0, 0, 1, trimHeight, 0, bleed, bleed, trimHeight);
+  context.drawImage(trim, trimWidth - 1, 0, 1, trimHeight, bleed + trimWidth, bleed, bleed, trimHeight);
+  context.drawImage(trim, 0, 0, trimWidth, 1, bleed, 0, trimWidth, bleed);
+  context.drawImage(trim, 0, trimHeight - 1, trimWidth, 1, bleed, bleed + trimHeight, trimWidth, bleed);
+  context.drawImage(trim, 0, 0, 1, 1, 0, 0, bleed, bleed);
+  context.drawImage(trim, trimWidth - 1, 0, 1, 1, bleed + trimWidth, 0, bleed, bleed);
+  context.drawImage(trim, 0, trimHeight - 1, 1, 1, 0, bleed + trimHeight, bleed, bleed);
+  context.drawImage(trim, trimWidth - 1, trimHeight - 1, 1, 1, bleed + trimWidth, bleed + trimHeight, bleed, bleed);
+  return output;
+}
+
+function setPrintPageBoxes(pdf: import("jspdf").jsPDF) {
+  const pointsPerMm = 72 / 25.4;
+  const box = (left: number, bottom: number, right: number, top: number) => ({
+    bottomLeftX: left * pointsPerMm,
+    bottomLeftY: bottom * pointsPerMm,
+    topRightX: right * pointsPerMm,
+    topRightY: top * pointsPerMm,
+  });
+  const page = pdf.getCurrentPageInfo().pageContext;
+  page.cropBox = box(0, 0, 216, 303);
+  page.bleedBox = box(0, 0, 216, 303);
+  page.trimBox = box(3, 3, 213, 300);
+}
+
 function sameStopOccurrence(a?: Stop, b?: Stop) {
   if (!a || !b) return false;
   if (a.sourceKey && b.sourceKey) return a.sourceKey === b.sourceKey;
@@ -568,10 +616,11 @@ export default function Home() {
           logging: false,
           imageTimeout: 15000,
         });
-        const image = canvas.toDataURL("image/jpeg", 0.94);
+        const printCanvas = canvasWithUniformBleed(canvas);
+        const image = printCanvas.toDataURL("image/jpeg", 0.94);
         const alias = `emma-page-${index}`;
+        setPrintPageBoxes(pdf);
         pdf.addImage(image, "JPEG", 0, 0, 216, 303, alias, "FAST");
-        pdf.addImage(image, "JPEG", 3, 3, 210, 297, alias, "FAST");
         pdf.setDrawColor(0, 0, 0);
         pdf.setLineWidth(0.15);
         [[0.5, 3, 2.5, 3], [3, 0.5, 3, 2.5], [213.5, 3, 215.5, 3], [213, 0.5, 213, 2.5], [0.5, 300, 2.5, 300], [3, 300.5, 3, 302.5], [213.5, 300, 215.5, 300], [213, 300.5, 213, 302.5]].forEach(([x1, y1, x2, y2]) => pdf.line(x1, y1, x2, y2));

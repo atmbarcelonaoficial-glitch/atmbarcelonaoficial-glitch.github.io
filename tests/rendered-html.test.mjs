@@ -53,6 +53,10 @@ test("keeps GTFS import, adaptive templates and pagination connected", async () 
   assert.match(page, /CONTINUACIÓ/);
   assert.match(page, /function FrequencyTable/);
   assert.match(page, /exportPdf/);
+  assert.match(page, /canvasWithUniformBleed/);
+  assert.match(page, /setPrintPageBoxes/);
+  assert.match(page, /trimBox/);
+  assert.equal((page.match(/pdf\.addImage\(image/g) || []).length, 1);
   assert.match(page, /plantilla-emma\.csv/);
   assert.match(page, /undoRemoveStop/);
   assert.match(page, /reorderStop/);
