@@ -994,9 +994,9 @@ function CircularRouteDiagram({ stops, currentStop, color }: { stops: Stop[]; cu
   return <section className={`route-diagram circular-diagram ${stops.length > 24 ? "ultra-dense" : stops.length > 14 ? "dense" : ""}`} style={{ "--route": color, "--loop-row": `${rowHeight}px` } as React.CSSProperties}>
     <div className="diagram-heading"><small>RECORREGUT CIRCULAR</small><b>{stops.length} parades · sentit indicat</b></div>
     <div className="circular-route">
-      <div className="circular-branch left-branch">{left.map(({ stop, index }) => { const isHere = samePhysicalStop(stop, currentStop); return <div className={`circular-stop ${isHere ? "here" : ""}`} key={stop.sourceKey || index}><div><b>{stop.name}</b></div><i />{isHere && <HereTag className="circular-current-tag" direction="left" />}</div>; })}</div>
+      <div className="circular-branch left-branch">{left.map(({ stop, index }) => { const isHere = samePhysicalStop(stop, currentStop); return <div className={`circular-stop ${isHere ? "here" : ""}`} key={stop.sourceKey || index}><div><b>{stop.name}</b></div><i /></div>; })}</div>
       <div className="loop-track"><span className="arrow down" aria-hidden="true">↓</span><span className="arrow up" aria-hidden="true">↑</span></div>
-      <div className="circular-branch right-branch">{right.map(({ stop, index }) => { const isHere = samePhysicalStop(stop, currentStop); return <div className={`circular-stop ${isHere ? "here" : ""}`} key={stop.sourceKey || index}><i /><div><b>{stop.name}</b></div>{isHere && <HereTag className="circular-current-tag" direction="right" />}</div>; })}</div>
+      <div className="circular-branch right-branch">{right.map(({ stop, index }) => { const isHere = samePhysicalStop(stop, currentStop); return <div className={`circular-stop ${isHere ? "here" : ""}`} key={stop.sourceKey || index}><i /><div><b>{stop.name}</b></div></div>; })}</div>
     </div>
   </section>;
 }

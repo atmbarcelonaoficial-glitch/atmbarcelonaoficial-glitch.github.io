@@ -63,7 +63,8 @@ test("keeps GTFS import, adaptive templates and pagination connected", async () 
   assert.match(page, /stop-drag-handle/);
   assert.match(page, /samePhysicalStop/);
   assert.match(page, /detectedCircular/);
-  assert.match(page, /circular-current-tag/);
+  assert.doesNotMatch(page, /circular-current-tag/);
+  assert.match(css, /\.circular-stop\.here i\{background:#E30613/);
   assert.match(page, /isTerminal = i === 0 \|\| i === stops\.length - 1/);
   assert.match(page, /is-terminal/);
   assert.match(page, /Visió general/);
