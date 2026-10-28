@@ -49,6 +49,8 @@ test("keeps GTFS import, adaptive templates and pagination connected", async () 
   assert.match(page, /A4 · horaris complets/);
   assert.doesNotMatch(page, /Auto · recomanat|Mig A4 · línia/);
   assert.match(page, /function paginate/);
+  assert.match(page, /function singlePageOverview/);
+  assert.match(page, /total:\s*1/);
   assert.match(page, /charsPerRow/);
   assert.match(page, /CONTINUACIÓ/);
   assert.match(page, /function FrequencyTable/);
@@ -79,6 +81,12 @@ test("keeps GTFS import, adaptive templates and pagination connected", async () 
   assert.match(page, /setGeneralView/);
   assert.match(page, /generalView \? 1 : periodVariants\.reduce/);
   assert.match(page, /includeAllVersions && !generalView/);
+  assert.match(page, /const pagesToExport = includeStopVersions \? allRenderedVersions : currentRenderedVersions/);
+  assert.match(page, /setExportPage\(pagesToExport\[index\]\)/);
+  assert.doesNotMatch(page, /setBatchPrint/);
+  assert.match(page, /pdfPreview/);
+  assert.match(page, /Previsualització del PDF/);
+  assert.doesNotMatch(page, /window\.open/);
   assert.match(page, /overview:\s*true/);
   assert.match(page, /leftLogoRef/);
   assert.match(page, /footer-accordion/);
@@ -96,5 +104,6 @@ test("keeps GTFS import, adaptive templates and pagination connected", async () 
   assert.match(css, /paper-stack>\.paper-wrap:before/);
   assert.match(css, /\.stop-drag-handle/);
   assert.match(css, /\.remove-stop-dialog/);
+  assert.match(css, /\.pdf-preview-dialog/);
   assert.match(css, /\.route-stop\.is-terminal b/);
 });

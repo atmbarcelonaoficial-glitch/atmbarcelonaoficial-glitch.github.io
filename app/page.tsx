@@ -144,6 +144,15 @@ type PagePlan = {
   selectedStop?: Stop;
 };
 
+type RenderedVersion = {
+  page: PagePlan;
+  stop?: Stop;
+  stopIndex: number;
+  overview: boolean;
+  periodLabel: string;
+  periodNotes: string[];
+};
+
 function paginate(stops: Stop[], current: number, layout: Layout, frequency: boolean): PagePlan[] {
   const rowLimit = layout === "table" ? 44 : 36;
   const tripCount = Math.max(...stops.map((stop) => stop.times.length), 0);
@@ -177,6 +186,25 @@ function paginate(stops: Stop[], current: number, layout: Layout, frequency: boo
     return { stops: pageStops, stopOffset: stopChunk.offset, tripOffset, current: localCurrent, page: 0, total: 0, section: `Parades ${from}–${to}${timeLabel}`, selectedStop: current >= 0 ? stops[current] : undefined };
   }));
   return raw.map((page, index) => ({ ...page, page: index + 1, total: raw.length }));
+}
+
+function singlePageOverview(stops: Stop[]): PagePlan {
+  return {
+    stops,
+    stopOffset: 0,
+    tripOffset: 0,
+    current: -1,
+    page: 1,
+    total: 1,
+    section: "Visió general",
+    selectedStop: undefined,
+  };
+}
+
+function afterNextPaint() {
+  return new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()));
+  });
 }
 
 function timeMinutes(value: string) {
@@ -252,8 +280,9 @@ export default function Home() {
   const [importNotes, setImportNotes] = useState<string[]>([]);
   const [importedTrips, setImportedTrips] = useState(0);
   const [gtfsUsesFrequencies, setGtfsUsesFrequencies] = useState(false);
-  const [batchPrint, setBatchPrint] = useState(false);
+  const [exportPage, setExportPage] = useState<RenderedVersion | null>(null);
   const [pdfProgress, setPdfProgress] = useState("");
+  const [pdfPreview, setPdfPreview] = useState<{ url: string; filename: string; pages: string[] } | null>(null);
   const [zoom, setZoom] = useState(78);
   const [allPeriodImports, setAllPeriodImports] = useState<LineImport[]>([]);
   const [newProjectDialog, setNewProjectDialog] = useState(false);
@@ -282,12 +311,6 @@ export default function Home() {
   }, [lineColor]);
 
   useEffect(() => {
-    const finishPrint = () => setBatchPrint(false);
-    window.addEventListener("afterprint", finishPrint);
-    return () => window.removeEventListener("afterprint", finishPrint);
-  }, []);
-
-  useEffect(() => {
     if (!isDirty) return;
     const warnBeforeLeaving = (event: BeforeUnloadEvent) => event.preventDefault();
     window.addEventListener("beforeunload", warnBeforeLeaving);
@@ -311,25 +334,33 @@ export default function Home() {
   const periodVariants = useMemo(() => periodMode === "all" && allPeriodImports.length
     ? allPeriodImports.map((item) => ({ label: item.period, stops: item.stops, notes: item.notes }))
     : [{ label: period, stops, notes: importNotes }], [periodMode, allPeriodImports, period, stops, importNotes]);
-  const pages = useMemo(() => periodVariants.flatMap((variant) => {
-    const selected = stops[current];
-    const variantCurrent = generalView ? -1 : Math.max(0, variant.stops.findIndex((stop) => sameStopOccurrence(stop, selected)));
-    return paginate(variant.stops, variantCurrent, effectiveLayout, useFrequency);
-  }), [periodVariants, stops, current, generalView, effectiveLayout, useFrequency]);
-  const renderedVersions = useMemo(() => batchPrint
-    ? periodVariants.flatMap((variant) => [
-      ...paginate(variant.stops, -1, effectiveLayout, useFrequency).map((page) => ({ page, stop: undefined, stopIndex: -1, overview: true, periodLabel: variant.label, periodNotes: variant.notes })),
+  const overviewVariant = useMemo(() => periodVariants.find((variant) => variant.label === period) || periodVariants[0], [periodVariants, period]);
+  const pages = useMemo(() => generalView && overviewVariant
+    ? [singlePageOverview(overviewVariant.stops)]
+    : periodVariants.flatMap((variant) => {
+      const selected = stops[current];
+      const variantCurrent = Math.max(0, variant.stops.findIndex((stop) => sameStopOccurrence(stop, selected)));
+      return paginate(variant.stops, variantCurrent, effectiveLayout, useFrequency);
+    }), [periodVariants, overviewVariant, stops, current, generalView, effectiveLayout, useFrequency]);
+  const currentRenderedVersions = useMemo<RenderedVersion[]>(() => {
+    if (generalView && overviewVariant) {
+      return [{ page: singlePageOverview(overviewVariant.stops), stop: undefined, stopIndex: -1, overview: true, periodLabel: overviewVariant.label, periodNotes: overviewVariant.notes }];
+    }
+    return periodVariants.flatMap((variant) => {
+      const selected = stops[current];
+      const stopIndex = Math.max(0, variant.stops.findIndex((stop) => sameStopOccurrence(stop, selected)));
+      return paginate(variant.stops, stopIndex, effectiveLayout, useFrequency).map((page) => ({ page, stop: variant.stops[stopIndex], stopIndex, overview: false, periodLabel: variant.label, periodNotes: variant.notes }));
+    });
+  }, [periodVariants, overviewVariant, stops, current, generalView, effectiveLayout, useFrequency]);
+  const allRenderedVersions = useMemo<RenderedVersion[]>(() => periodVariants.flatMap((variant) => [
+      { page: singlePageOverview(variant.stops), stop: undefined, stopIndex: -1, overview: true, periodLabel: variant.label, periodNotes: variant.notes },
       ...physicalStops.flatMap((physicalStop) => {
         const stopIndex = Math.max(0, variant.stops.findIndex((stop) => samePhysicalStop(stop, physicalStop)));
         const stop = variant.stops[stopIndex];
         return paginate(variant.stops, stopIndex, effectiveLayout, useFrequency).map((page) => ({ page, stop, stopIndex, overview: false, periodLabel: variant.label, periodNotes: variant.notes }));
       }),
-    ])
-    : periodVariants.flatMap((variant) => {
-      const selected = stops[current];
-      const stopIndex = generalView ? -1 : Math.max(0, variant.stops.findIndex((stop) => sameStopOccurrence(stop, selected)));
-      return paginate(variant.stops, stopIndex, effectiveLayout, useFrequency).map((page) => ({ page, stop: stopIndex >= 0 ? variant.stops[stopIndex] : undefined, stopIndex, overview: generalView, periodLabel: variant.label, periodNotes: variant.notes }));
-    }), [batchPrint, periodVariants, stops, physicalStops, current, generalView, effectiveLayout, useFrequency]);
+    ]), [periodVariants, physicalStops, effectiveLayout, useFrequency]);
+  const renderedVersions = exportPage ? [exportPage] : currentRenderedVersions;
   const directionOptions = dataset ? directionsFor(dataset, selectedRoute) : [];
   const serviceOptions = dataset ? servicesFor(dataset, selectedRoute, selectedDirection) : [];
   const versionCount = stops.length
@@ -602,27 +633,25 @@ export default function Home() {
 
   const exportPdf = async (includeAllVersions: boolean, preview: boolean) => {
     if (!stops.length || pdfProgress) return;
-    const previewWindow = preview ? window.open("", "_blank") : null;
-    if (previewWindow) {
-      previewWindow.document.title = "Emma · Preparant PDF";
-      previewWindow.document.body.innerHTML = '<p style="font:16px Helvetica,Arial,sans-serif;padding:32px;color:#25302c">Preparant la previsualització PDF…</p>';
-    }
     const includeStopVersions = includeAllVersions && !generalView;
-    setBatchPrint(includeStopVersions);
-    setPdfProgress("Preparant les pàgines…");
-    await new Promise<void>((resolve) => window.setTimeout(resolve, 180));
-    await document.fonts?.ready;
-    document.body.classList.add("pdf-exporting");
+    const pagesToExport = includeStopVersions ? allRenderedVersions : currentRenderedVersions;
+    setPdfProgress("Preparant el PDF…");
     try {
-      const elements = Array.from(paperStackRef.current?.querySelectorAll<HTMLElement>(".paper-wrap .timetable") || []);
-      if (!elements.length) throw new Error("No hi ha cap pàgina per exportar.");
+      if (!pagesToExport.length) throw new Error("No hi ha cap pàgina per exportar.");
       const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import("html2canvas"), import("jspdf")]);
+      await document.fonts?.ready;
+      document.body.classList.add("pdf-exporting");
       const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: [216, 303], compress: true, putOnlyUsedFonts: true });
+      const previewPages: string[] = [];
       pdf.setProperties({ title: `${lineCode || "Emma"} · ${lineTitle || "Horaris"}`, subject: "Horaris de transport públic", creator: "Emma · Creador d’horaris" });
-      for (let index = 0; index < elements.length; index += 1) {
-        setPdfProgress(`Generant pàgina ${index + 1} de ${elements.length}…`);
+      for (let index = 0; index < pagesToExport.length; index += 1) {
+        setPdfProgress(`Generant pàgina ${index + 1} de ${pagesToExport.length}…`);
+        setExportPage(pagesToExport[index]);
+        await afterNextPaint();
+        const element = paperStackRef.current?.querySelector<HTMLElement>(".paper-wrap .timetable");
+        if (!element) throw new Error(`No s’ha pogut preparar la pàgina ${index + 1}.`);
         if (index > 0) pdf.addPage([216, 303], "portrait");
-        const canvas = await html2canvas(elements[index], {
+        const canvas = await html2canvas(element, {
           scale: 1.5,
           backgroundColor: "#ffffff",
           useCORS: true,
@@ -631,6 +660,7 @@ export default function Home() {
         });
         const printCanvas = canvasWithUniformBleed(canvas);
         const image = printCanvas.toDataURL("image/jpeg", 0.94);
+        if (preview) previewPages.push(image);
         const alias = `emma-page-${index}`;
         setPrintPageBoxes(pdf);
         pdf.addImage(image, "JPEG", 0, 0, 216, 303, alias, "FAST");
@@ -641,24 +671,18 @@ export default function Home() {
       const filename = `emma-${(lineCode || "horaris").replace(/[^a-z0-9_-]+/gi, "-").toLowerCase()}.pdf`;
       if (preview) {
         const url = URL.createObjectURL(pdf.output("blob"));
-        if (previewWindow) previewWindow.location.href = url;
-        else {
-          const link = document.createElement("a");
-          link.href = url;
-          link.target = "_blank";
-          link.rel = "noopener";
-          link.click();
-        }
-        window.setTimeout(() => URL.revokeObjectURL(url), 120000);
+        setPdfPreview((previous) => {
+          if (previous) URL.revokeObjectURL(previous.url);
+          return { url, filename, pages: previewPages };
+        });
       } else {
         pdf.save(filename);
       }
     } catch (error) {
-      previewWindow?.close();
       alert(error instanceof Error ? error.message : "No s’ha pogut generar el PDF.");
     } finally {
       document.body.classList.remove("pdf-exporting");
-      setBatchPrint(false);
+      setExportPage(null);
       setPdfProgress("");
     }
   };
@@ -671,6 +695,13 @@ export default function Home() {
     } catch {
       alert("No s’ha pogut desar el projecte. Redueix el pes dels logos i torna-ho a provar.");
     }
+  };
+
+  const closePdfPreview = () => {
+    setPdfPreview((previous) => {
+      if (previous) URL.revokeObjectURL(previous.url);
+      return null;
+    });
   };
 
   const resetProject = () => {
@@ -935,6 +966,12 @@ export default function Home() {
           </div>
         </section>
       </div>}
+      {pdfPreview && <div className="modal-backdrop pdf-preview-backdrop" role="presentation" onMouseDown={closePdfPreview}>
+        <section className="pdf-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="pdf-preview-title" onMouseDown={(event) => event.stopPropagation()}>
+          <header><div><small>PDF A4 D’IMPREMTA</small><h2 id="pdf-preview-title">Previsualització</h2></div><div><a href={pdfPreview.url} download={pdfPreview.filename}>Descarrega PDF</a><button onClick={closePdfPreview} aria-label="Tanca la previsualització">×</button></div></header>
+          <div className="pdf-preview-pages" role="document" aria-label="Previsualització del PDF">{pdfPreview.pages.map((pageImage, index) => <figure key={index}><img src={pageImage} alt={`Pàgina ${index + 1} del PDF`} /><figcaption>Pàgina {index + 1} de {pdfPreview.pages.length}</figcaption></figure>)}</div>
+        </section>
+      </div>}
       {lastRemoved && <div className="undo-toast" role="status"><span><b>Parada eliminada</b>{lastRemoved.stop.name}</span><button onClick={undoRemoveStop}>Desfés</button><button className="dismiss" onClick={() => setLastRemoved(null)} aria-label="Tanca">×</button></div>}
     </main>
   );
@@ -973,8 +1010,11 @@ function TimetablePage({ page, layout, circular, frequency, currentStop, overvie
     return Array.from({ length: max }, (_, trip) => page.stops.map((stop) => stop.times[trip] || "—"));
   }, [page.stops]);
   const currentTimes = currentStop?.times || page.stops[0]?.times || [];
+  const overviewDensity = overview
+    ? (page.stops.length > 32 || trips.length > 28 ? " overview-ultra" : page.stops.length > 22 || trips.length > 16 ? " overview-dense" : "")
+    : "";
   return <div className={`paper-wrap layout-${layout}`}>
-    <article className={`timetable ${night ? "night" : ""} ${gradient ? "gradient" : "red"}${overview ? " overview-version" : ""}`} style={{ "--line": lineColor, "--line-ink": contrastText(lineColor), "--pastel": mixWithWhite(lineColor, .76), "--active-row": mixWithWhite(lineColor, .86) } as React.CSSProperties}>
+    <article className={`timetable ${night ? "night" : ""} ${gradient ? "gradient" : "red"}${overview ? ` overview-version${overviewDensity}` : ""}`} style={{ "--line": lineColor, "--line-ink": contrastText(lineColor), "--pastel": mixWithWhite(lineColor, .76), "--active-row": mixWithWhite(lineColor, .86) } as React.CSSProperties}>
       <header className="sheet-header">
         <div className="route-title"><div className="line-badge" style={{ background: lineColor, color: badgeInk === "white" ? "#ffffff" : "#111111" }}>{lineCode}</div><div><span className="operator-line"><small>OPERAT PER</small><b>{operator.toUpperCase()}</b></span><h1>{lineTitle || [origin, destination].filter(Boolean).join(" — ")}</h1><p>{[validity, generatedOn].filter(Boolean).join(" · ")}</p></div></div>
         {!overview && <div className="stop-code"><small>CODI DE PARADA</small><b>{currentStop?.code || "—"}</b></div>}
