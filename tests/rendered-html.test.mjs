@@ -59,6 +59,11 @@ test("keeps GTFS import, adaptive templates and pagination connected", async () 
   assert.equal((page.match(/pdf\.addImage\(image/g) || []).length, 1);
   assert.match(page, /plantilla-emma\.csv/);
   assert.match(page, /undoRemoveStop/);
+  assert.match(page, /timesDraft/);
+  assert.match(page, /setTimesDraft\(event\.target\.value\)/);
+  assert.match(page, /pendingRemoval/);
+  assert.match(page, /Eliminar aquesta parada\?/);
+  assert.match(page, /requestRemoveStop\(i\)/);
   assert.match(page, /reorderStop/);
   assert.match(page, /stop-drag-handle/);
   assert.match(page, /samePhysicalStop/);
@@ -88,5 +93,6 @@ test("keeps GTFS import, adaptive templates and pagination connected", async () 
   assert.match(css, /\.site-header,.topbar,.sidebar,.canvas-toolbar,.modal-backdrop,.undo-toast\{display:none!important\}/);
   assert.match(css, /paper-stack>\.paper-wrap:before/);
   assert.match(css, /\.stop-drag-handle/);
+  assert.match(css, /\.remove-stop-dialog/);
   assert.match(css, /\.route-stop\.is-terminal b/);
 });

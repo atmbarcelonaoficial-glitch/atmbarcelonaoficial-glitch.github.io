@@ -259,8 +259,10 @@ export default function Home() {
   const [newProjectDialog, setNewProjectDialog] = useState(false);
   const [savedSnapshot, setSavedSnapshot] = useState("");
   const [editingTimes, setEditingTimes] = useState<number | null>(null);
+  const [timesDraft, setTimesDraft] = useState("");
   const [draggedStop, setDraggedStop] = useState<number | null>(null);
   const [dragOverStop, setDragOverStop] = useState<number | null>(null);
+  const [pendingRemoval, setPendingRemoval] = useState<{ stop: Stop; index: number } | null>(null);
   const [lastRemoved, setLastRemoved] = useState<{ stop: Stop; index: number; previousCurrent: number } | null>(null);
   const paperStackRef = useRef<HTMLDivElement>(null);
   const dragTargetRef = useRef<number | null>(null);
@@ -395,6 +397,13 @@ export default function Home() {
       return selected;
     });
     setEditingTimes(null);
+    setTimesDraft("");
+    setPendingRemoval(null);
+  };
+
+  const requestRemoveStop = (index: number) => {
+    if (stops.length <= 1) return;
+    setPendingRemoval({ stop: stops[index], index });
   };
 
   const undoRemoveStop = () => {
@@ -410,6 +419,7 @@ export default function Home() {
     setStops((old) => [...old.slice(0, index), stop, ...old.slice(index)]);
     setCurrent(index);
     setEditingTimes(index);
+    setTimesDraft("");
   };
 
   const applyGtfsLine = (source: GtfsDataset, routeId: string, direction: string, serviceId: string) => {
@@ -703,6 +713,8 @@ export default function Home() {
     setZoom(78);
     setSavedSnapshot("");
     setEditingTimes(null);
+    setTimesDraft("");
+    setPendingRemoval(null);
     setLastRemoved(null);
     setNewProjectDialog(false);
   };
@@ -833,11 +845,11 @@ export default function Home() {
                 <div className="stop-actions">
                   <button onClick={() => moveStop(i, -1)} disabled={i === 0} aria-label={`Mou ${stop.name} amunt`} title="Mou amunt">↑</button>
                   <button onClick={() => moveStop(i, 1)} disabled={i === stops.length - 1} aria-label={`Mou ${stop.name} avall`} title="Mou avall">↓</button>
-                  <button className={editingTimes === i ? "active" : ""} onClick={() => setEditingTimes(editingTimes === i ? null : i)} aria-label={`Edita els horaris de ${stop.name}`} title="Edita els horaris">◷</button>
-                  <button className="remove-stop" onClick={() => removeStop(i)} disabled={stops.length <= 1} aria-label={`Elimina la parada ${stop.name}`} title="Elimina la parada">×</button>
+                  <button className={editingTimes === i ? "active" : ""} onClick={() => { if (editingTimes === i) { setEditingTimes(null); setTimesDraft(""); } else { setEditingTimes(i); setTimesDraft(stop.times.join(", ")); } }} aria-label={`Edita els horaris de ${stop.name}`} title="Edita els horaris">◷</button>
+                  <button className="remove-stop" onClick={() => requestRemoveStop(i)} disabled={stops.length <= 1} aria-label={`Elimina la parada ${stop.name}`} title="Elimina la parada">×</button>
                 </div>
               </div>
-              {editingTimes === i && <label className="stop-times-editor"><span>Hores de pas, separades per comes</span><textarea value={stop.times.join(", ")} onChange={(event) => updateStopTimes(i, event.target.value)} placeholder="06:20, 06:50, 07:20" /></label>}
+              {editingTimes === i && <label className="stop-times-editor"><span>Hores de pas, separades per comes</span><textarea value={timesDraft} onChange={(event) => { setTimesDraft(event.target.value); updateStopTimes(i, event.target.value); }} placeholder="06:20, 06:50, 07:20" /></label>}
             </div>)}
             <button className="add-stop" onClick={addStopAfterCurrent}>＋ Afegeix parada després de l’actual</button>
           </div>}
@@ -905,6 +917,18 @@ export default function Home() {
             <button className="quiet" onClick={() => setNewProjectDialog(false)}>Cancel·la</button>
             <button className="danger" onClick={resetProject}>Descarta i crea’n un de nou</button>
             <button className="confirm" onClick={() => { saveProject(); resetProject(); }}>Desa i crea’n un de nou</button>
+          </div>
+        </section>
+      </div>}
+      {pendingRemoval && <div className="modal-backdrop editor-confirm-backdrop" role="presentation" onMouseDown={() => setPendingRemoval(null)}>
+        <section className="new-project-dialog remove-stop-dialog" role="dialog" aria-modal="true" aria-labelledby="remove-stop-title" onMouseDown={(event) => event.stopPropagation()}>
+          <div className="dialog-icon" aria-hidden="true">!</div>
+          <small>ACCIÓ DELICADA</small>
+          <h2 id="remove-stop-title">Eliminar aquesta parada?</h2>
+          <p>Eliminaràs <b>{pendingRemoval.stop.name}</b> del recorregut i també totes les seves hores de pas.</p>
+          <div className="dialog-actions">
+            <button className="quiet" autoFocus onClick={() => setPendingRemoval(null)}>Cancel·la</button>
+            <button className="danger" onClick={() => removeStop(pendingRemoval.index)}>Elimina la parada</button>
           </div>
         </section>
       </div>}
