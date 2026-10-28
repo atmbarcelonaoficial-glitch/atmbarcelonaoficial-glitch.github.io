@@ -332,7 +332,9 @@ export default function Home() {
     }), [batchPrint, periodVariants, stops, physicalStops, current, generalView, effectiveLayout, useFrequency]);
   const directionOptions = dataset ? directionsFor(dataset, selectedRoute) : [];
   const serviceOptions = dataset ? servicesFor(dataset, selectedRoute, selectedDirection) : [];
-  const versionCount = stops.length ? periodVariants.reduce((total) => total + physicalStops.length + 1, 0) : 0;
+  const versionCount = stops.length
+    ? (generalView ? 1 : periodVariants.reduce((total) => total + physicalStops.length + 1, 0))
+    : 0;
 
   const updateStop = (index: number, key: "name" | "code", value: string) => {
     setStops((old) => old.map((s, i) => i === index ? { ...s, [key]: value } : s));
@@ -605,7 +607,8 @@ export default function Home() {
       previewWindow.document.title = "Emma · Preparant PDF";
       previewWindow.document.body.innerHTML = '<p style="font:16px Helvetica,Arial,sans-serif;padding:32px;color:#25302c">Preparant la previsualització PDF…</p>';
     }
-    setBatchPrint(includeAllVersions);
+    const includeStopVersions = includeAllVersions && !generalView;
+    setBatchPrint(includeStopVersions);
     setPdfProgress("Preparant les pàgines…");
     await new Promise<void>((resolve) => window.setTimeout(resolve, 180));
     await document.fonts?.ready;

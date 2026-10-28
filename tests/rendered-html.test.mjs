@@ -77,6 +77,8 @@ test("keeps GTFS import, adaptive templates and pagination connected", async () 
   assert.match(page, /is-terminal/);
   assert.match(page, /Visió general/);
   assert.match(page, /setGeneralView/);
+  assert.match(page, /generalView \? 1 : periodVariants\.reduce/);
+  assert.match(page, /includeAllVersions && !generalView/);
   assert.match(page, /overview:\s*true/);
   assert.match(page, /leftLogoRef/);
   assert.match(page, /footer-accordion/);
