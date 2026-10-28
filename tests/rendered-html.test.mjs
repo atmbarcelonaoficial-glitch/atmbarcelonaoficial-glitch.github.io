@@ -51,6 +51,8 @@ test("keeps GTFS import, adaptive templates and pagination connected", async () 
   assert.match(page, /function paginate/);
   assert.match(page, /function singlePageOverview/);
   assert.match(page, /total:\s*1/);
+  assert.match(page, /paginate\(stops, 0, layout, frequency\)\[0\]/);
+  assert.match(page, /stop\.times\.slice\(0, visibleTripCount\)/);
   assert.match(page, /charsPerRow/);
   assert.match(page, /CONTINUACIÓ/);
   assert.match(page, /function FrequencyTable/);

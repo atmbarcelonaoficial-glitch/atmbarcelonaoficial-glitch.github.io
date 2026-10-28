@@ -188,9 +188,14 @@ function paginate(stops: Stop[], current: number, layout: Layout, frequency: boo
   return raw.map((page, index) => ({ ...page, page: index + 1, total: raw.length }));
 }
 
-function singlePageOverview(stops: Stop[]): PagePlan {
+function singlePageOverview(stops: Stop[], layout: Layout, frequency: boolean): PagePlan {
+  const firstStopPage = paginate(stops, 0, layout, frequency)[0];
+  const visibleTripCount = Math.max(...(firstStopPage?.stops || []).map((stop) => stop.times.length), 0);
   return {
-    stops,
+    stops: stops.map((stop) => ({
+      ...stop,
+      times: frequency ? stop.times : stop.times.slice(0, visibleTripCount),
+    })),
     stopOffset: 0,
     tripOffset: 0,
     current: -1,
@@ -336,7 +341,7 @@ export default function Home() {
     : [{ label: period, stops, notes: importNotes }], [periodMode, allPeriodImports, period, stops, importNotes]);
   const overviewVariant = useMemo(() => periodVariants.find((variant) => variant.label === period) || periodVariants[0], [periodVariants, period]);
   const pages = useMemo(() => generalView && overviewVariant
-    ? [singlePageOverview(overviewVariant.stops)]
+    ? [singlePageOverview(overviewVariant.stops, effectiveLayout, useFrequency)]
     : periodVariants.flatMap((variant) => {
       const selected = stops[current];
       const variantCurrent = Math.max(0, variant.stops.findIndex((stop) => sameStopOccurrence(stop, selected)));
@@ -344,7 +349,7 @@ export default function Home() {
     }), [periodVariants, overviewVariant, stops, current, generalView, effectiveLayout, useFrequency]);
   const currentRenderedVersions = useMemo<RenderedVersion[]>(() => {
     if (generalView && overviewVariant) {
-      return [{ page: singlePageOverview(overviewVariant.stops), stop: undefined, stopIndex: -1, overview: true, periodLabel: overviewVariant.label, periodNotes: overviewVariant.notes }];
+      return [{ page: singlePageOverview(overviewVariant.stops, effectiveLayout, useFrequency), stop: undefined, stopIndex: -1, overview: true, periodLabel: overviewVariant.label, periodNotes: overviewVariant.notes }];
     }
     return periodVariants.flatMap((variant) => {
       const selected = stops[current];
@@ -353,7 +358,7 @@ export default function Home() {
     });
   }, [periodVariants, overviewVariant, stops, current, generalView, effectiveLayout, useFrequency]);
   const allRenderedVersions = useMemo<RenderedVersion[]>(() => periodVariants.flatMap((variant) => [
-      { page: singlePageOverview(variant.stops), stop: undefined, stopIndex: -1, overview: true, periodLabel: variant.label, periodNotes: variant.notes },
+      { page: singlePageOverview(variant.stops, effectiveLayout, useFrequency), stop: undefined, stopIndex: -1, overview: true, periodLabel: variant.label, periodNotes: variant.notes },
       ...physicalStops.flatMap((physicalStop) => {
         const stopIndex = Math.max(0, variant.stops.findIndex((stop) => samePhysicalStop(stop, physicalStop)));
         const stop = variant.stops[stopIndex];
