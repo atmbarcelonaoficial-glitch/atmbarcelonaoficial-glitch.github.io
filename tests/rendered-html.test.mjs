@@ -101,6 +101,12 @@ test("keeps GTFS import, adaptive templates and pagination connected", async () 
   assert.doesNotMatch(page, /setBatchPrint/);
   assert.match(page, /pdfPreview/);
   assert.match(page, /Previsualització del PDF/);
+  assert.match(page, /className="service-pill"/);
+  assert.match(page, /<div className="line-badge"[^>]+><span>\{lineCode\}<\/span><\/div>/);
+  assert.match(page, /<td key=\{tripIndex\}><span>\{trip\[stopIndex\] \|\| "—"\}<\/span><\/td>/);
+  assert.match(css, /Centrat tipogràfic estable/);
+  assert.match(css, /body\.pdf-exporting \.route-title \.line-badge>span\{transform:translateY\(-2px\)\}/);
+  assert.match(css, /\.transposed-table thead th,\.transposed-table tbody th\.stop-name,\.transposed-table td\{vertical-align:middle\}/);
   assert.doesNotMatch(page, /window\.open/);
   assert.match(page, /overview:\s*true/);
   assert.match(page, /leftLogoRef/);

@@ -1064,7 +1064,7 @@ function TimetablePage({ page, layout, circular, frequency, currentStop, overvie
   return <div className={`paper-wrap layout-${layout}`}>
     <article className={`timetable ${night ? "night" : ""} ${gradient ? "gradient" : "red"}${overview ? ` overview-version${overviewDensity}` : ""}`} style={{ "--line": lineColor, "--line-ink": contrastText(lineColor), "--pastel": mixWithWhite(lineColor, .76), "--active-row": mixWithWhite(lineColor, .86) } as React.CSSProperties}>
       <header className="sheet-header">
-        <div className="route-title"><div className="line-badge" style={{ background: lineColor, color: badgeInk === "white" ? "#ffffff" : "#111111" }}>{lineCode}</div><div><span className="operator-line"><small>OPERAT PER</small><b>{operator.toUpperCase()}</b></span><h1>{lineTitle || [origin, destination].filter(Boolean).join(" — ")}</h1><p>{[validity, generatedOn].filter(Boolean).join(" · ")}</p></div></div>
+        <div className="route-title"><div className="line-badge" style={{ background: lineColor, color: badgeInk === "white" ? "#ffffff" : "#111111" }}><span>{lineCode}</span></div><div><span className="operator-line"><small>OPERAT PER</small><b>{operator.toUpperCase()}</b></span><h1>{lineTitle || [origin, destination].filter(Boolean).join(" — ")}</h1><p>{[validity, generatedOn].filter(Boolean).join(" · ")}</p></div></div>
         {!overview && <div className="stop-code"><small>CODI DE PARADA</small><b>{currentStop?.code || "—"}</b></div>}
       </header>
       {page.total > 1 && <div className="continuation"><span><strong>{page.page === 1 ? "INICI" : "CONTINUACIÓ"}</strong>{page.section}</span><b>Pàgina {page.page} / {page.total}</b></div>}
@@ -1072,7 +1072,7 @@ function TimetablePage({ page, layout, circular, frequency, currentStop, overvie
         {layout !== "table" && <RouteDiagram stops={page.stops} currentStop={page.selectedStop} circle={circular} color={lineColor} />}
         <div className="schedule-area">
           {!overview && currentStop && <div className="you-are"><i className="stop-marker-icon" aria-hidden="true" /><b>{currentStop.name}</b><HereTag /></div>}
-          <div className="schedule-title"><div><small>{frequency ? "FREQÜÈNCIES ORIENTATIVES" : "HORARIS DE PAS APROXIMATS"}</small><h2>{period}</h2></div><span>{night ? "☾" : "☀"} {night ? "Servei nocturn" : "Servei diürn"}</span></div>
+          <div className="schedule-title"><div><small>{frequency ? "FREQÜÈNCIES ORIENTATIVES" : "HORARIS DE PAS APROXIMATS"}</small><h2>{period}</h2></div><span className="service-pill"><span aria-hidden="true">{night ? "☾" : "☀"}</span><b>{night ? "Servei nocturn" : "Servei diürn"}</b></span></div>
           {frequency ? <FrequencyTable times={currentTimes} /> : <ScheduleTable stops={page.stops} trips={trips} currentStop={page.selectedStop} showHereLabel={!overview} />}
           <div className="notes"><b>Informació important</b><p>{notes[0] || "Els horaris estan subjectes a les incidències i contratemps de la via pública. Consulta les alteracions del servei abans de viatjar."}</p></div>
         </div>
@@ -1126,7 +1126,7 @@ function FrequencyTable({ times, compact = false }: { times: string[]; compact?:
 
 function ScheduleTable({ stops, trips, currentStop, showHereLabel }: { stops: Stop[]; trips: string[][]; currentStop?: Stop; showHereLabel: boolean }) {
   const density = trips.length > 16 ? "hours-ultra" : trips.length > 10 ? "hours-dense" : "";
-  return <div className={`table-scroll ${density}`}><table className="transposed-table"><thead><tr><th className="stop-column"><small>RECORREGUT</small><span>Parada</span></th>{trips.map((trip, i) => <th key={i}><span>{trip.find((value) => value !== "—") || "—"}</span></th>)}</tr></thead><tbody>{stops.map((stop, stopIndex) => { const isHere = samePhysicalStop(stop, currentStop); return <tr className={isHere ? "active-row" : ""} key={stop.sourceKey || stopIndex}><th scope="row" className="stop-name">{showHereLabel && isHere && <HereTag compact />}<span>{stop.name}</span></th>{trips.map((trip, tripIndex) => <td key={tripIndex}>{trip[stopIndex] || "—"}</td>)}</tr>; })}</tbody></table></div>;
+  return <div className={`table-scroll ${density}`}><table className="transposed-table"><thead><tr><th className="stop-column"><small>RECORREGUT</small><span>Parada</span></th>{trips.map((trip, i) => <th key={i}><span>{trip.find((value) => value !== "—") || "—"}</span></th>)}</tr></thead><tbody>{stops.map((stop, stopIndex) => { const isHere = samePhysicalStop(stop, currentStop); return <tr className={isHere ? "active-row" : ""} key={stop.sourceKey || stopIndex}><th scope="row" className="stop-name">{showHereLabel && isHere && <HereTag compact />}<span>{stop.name}</span></th>{trips.map((trip, tripIndex) => <td key={tripIndex}><span>{trip[stopIndex] || "—"}</span></td>)}</tr>; })}</tbody></table></div>;
 }
 
 function HereTag({ compact = false, direction = "left", className = "", style }: { compact?: boolean; direction?: "left" | "right"; className?: string; style?: React.CSSProperties }) {
