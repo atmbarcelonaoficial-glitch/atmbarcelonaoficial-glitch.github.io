@@ -67,6 +67,10 @@ test("keeps GTFS import, adaptive templates and pagination connected", async () 
   assert.match(page, /function FrequencyTable/);
   assert.match(page, /exportPdf/);
   assert.match(page, /canvasWithUniformBleed/);
+  assert.match(page, /PRINT_PIXELS_PER_MM = 12/);
+  assert.match(page, /PRINT_TRIM_WIDTH_PX \/ renderWidth/);
+  assert.match(page, /toDataURL\("image\/png"\)/);
+  assert.match(page, /pdf\.addImage\(image, "PNG"/);
   assert.match(page, /setPrintPageBoxes/);
   assert.match(page, /trimBox/);
   assert.equal((page.match(/pdf\.addImage\(image/g) || []).length, 1);

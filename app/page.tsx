@@ -60,38 +60,51 @@ function normalizeRouteSearch(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("ca").trim();
 }
 
+const PRINT_PIXELS_PER_MM = 12; // 304,8 ppp: resolució d'impremta, per sobre dels 300 ppp.
+const PRINT_BLEED_PX = 3 * PRINT_PIXELS_PER_MM;
+const PRINT_TRIM_WIDTH_PX = 210 * PRINT_PIXELS_PER_MM;
+const PRINT_TRIM_HEIGHT_PX = 297 * PRINT_PIXELS_PER_MM;
+
 function canvasWithUniformBleed(source: HTMLCanvasElement) {
-  const pixelsPerMm = 6;
-  const bleed = 3 * pixelsPerMm;
-  const trimWidth = 210 * pixelsPerMm;
-  const trimHeight = 297 * pixelsPerMm;
   const trim = document.createElement("canvas");
-  trim.width = trimWidth;
-  trim.height = trimHeight;
+  trim.width = PRINT_TRIM_WIDTH_PX;
+  trim.height = PRINT_TRIM_HEIGHT_PX;
   const trimContext = trim.getContext("2d");
   if (!trimContext) throw new Error("No s’ha pogut preparar el full A4.");
   trimContext.imageSmoothingEnabled = true;
   trimContext.imageSmoothingQuality = "high";
-  trimContext.drawImage(source, 0, 0, trimWidth, trimHeight);
+  trimContext.drawImage(source, 0, 0, PRINT_TRIM_WIDTH_PX, PRINT_TRIM_HEIGHT_PX);
 
   const output = document.createElement("canvas");
-  output.width = trimWidth + bleed * 2;
-  output.height = trimHeight + bleed * 2;
+  output.width = PRINT_TRIM_WIDTH_PX + PRINT_BLEED_PX * 2;
+  output.height = PRINT_TRIM_HEIGHT_PX + PRINT_BLEED_PX * 2;
   const context = output.getContext("2d");
   if (!context) throw new Error("No s’han pogut preparar les sangs del PDF.");
   context.fillStyle = "#ffffff";
   context.fillRect(0, 0, output.width, output.height);
-  context.drawImage(trim, bleed, bleed);
+  context.drawImage(trim, PRINT_BLEED_PX, PRINT_BLEED_PX);
 
-  context.drawImage(trim, 0, 0, 1, trimHeight, 0, bleed, bleed, trimHeight);
-  context.drawImage(trim, trimWidth - 1, 0, 1, trimHeight, bleed + trimWidth, bleed, bleed, trimHeight);
-  context.drawImage(trim, 0, 0, trimWidth, 1, bleed, 0, trimWidth, bleed);
-  context.drawImage(trim, 0, trimHeight - 1, trimWidth, 1, bleed, bleed + trimHeight, trimWidth, bleed);
-  context.drawImage(trim, 0, 0, 1, 1, 0, 0, bleed, bleed);
-  context.drawImage(trim, trimWidth - 1, 0, 1, 1, bleed + trimWidth, 0, bleed, bleed);
-  context.drawImage(trim, 0, trimHeight - 1, 1, 1, 0, bleed + trimHeight, bleed, bleed);
-  context.drawImage(trim, trimWidth - 1, trimHeight - 1, 1, 1, bleed + trimWidth, bleed + trimHeight, bleed, bleed);
+  context.drawImage(trim, 0, 0, 1, PRINT_TRIM_HEIGHT_PX, 0, PRINT_BLEED_PX, PRINT_BLEED_PX, PRINT_TRIM_HEIGHT_PX);
+  context.drawImage(trim, PRINT_TRIM_WIDTH_PX - 1, 0, 1, PRINT_TRIM_HEIGHT_PX, PRINT_BLEED_PX + PRINT_TRIM_WIDTH_PX, PRINT_BLEED_PX, PRINT_BLEED_PX, PRINT_TRIM_HEIGHT_PX);
+  context.drawImage(trim, 0, 0, PRINT_TRIM_WIDTH_PX, 1, PRINT_BLEED_PX, 0, PRINT_TRIM_WIDTH_PX, PRINT_BLEED_PX);
+  context.drawImage(trim, 0, PRINT_TRIM_HEIGHT_PX - 1, PRINT_TRIM_WIDTH_PX, 1, PRINT_BLEED_PX, PRINT_BLEED_PX + PRINT_TRIM_HEIGHT_PX, PRINT_TRIM_WIDTH_PX, PRINT_BLEED_PX);
+  context.drawImage(trim, 0, 0, 1, 1, 0, 0, PRINT_BLEED_PX, PRINT_BLEED_PX);
+  context.drawImage(trim, PRINT_TRIM_WIDTH_PX - 1, 0, 1, 1, PRINT_BLEED_PX + PRINT_TRIM_WIDTH_PX, 0, PRINT_BLEED_PX, PRINT_BLEED_PX);
+  context.drawImage(trim, 0, PRINT_TRIM_HEIGHT_PX - 1, 1, 1, 0, PRINT_BLEED_PX + PRINT_TRIM_HEIGHT_PX, PRINT_BLEED_PX, PRINT_BLEED_PX);
+  context.drawImage(trim, PRINT_TRIM_WIDTH_PX - 1, PRINT_TRIM_HEIGHT_PX - 1, 1, 1, PRINT_BLEED_PX + PRINT_TRIM_WIDTH_PX, PRINT_BLEED_PX + PRINT_TRIM_HEIGHT_PX, PRINT_BLEED_PX, PRINT_BLEED_PX);
   return output;
+}
+
+function canvasPreview(source: HTMLCanvasElement) {
+  const preview = document.createElement("canvas");
+  preview.width = 864;
+  preview.height = Math.round(source.height * (preview.width / source.width));
+  const context = preview.getContext("2d");
+  if (!context) throw new Error("No s’ha pogut preparar la previsualització.");
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(source, 0, 0, preview.width, preview.height);
+  return preview.toDataURL("image/jpeg", 0.92);
 }
 
 function setPrintPageBoxes(pdf: import("jspdf").jsPDF) {
@@ -684,19 +697,20 @@ export default function Home() {
         const element = paperStackRef.current?.querySelector<HTMLElement>(".paper-wrap .timetable");
         if (!element) throw new Error(`No s’ha pogut preparar la pàgina ${index + 1}.`);
         if (index > 0) pdf.addPage([216, 303], "portrait");
+        const renderWidth = element.getBoundingClientRect().width;
         const canvas = await html2canvas(element, {
-          scale: 1.5,
+          scale: PRINT_TRIM_WIDTH_PX / renderWidth,
           backgroundColor: "#ffffff",
           useCORS: true,
           logging: false,
           imageTimeout: 15000,
         });
         const printCanvas = canvasWithUniformBleed(canvas);
-        const image = printCanvas.toDataURL("image/jpeg", 0.94);
-        if (preview) previewPages.push(image);
+        const image = printCanvas.toDataURL("image/png");
+        if (preview) previewPages.push(canvasPreview(printCanvas));
         const alias = `emma-page-${index}`;
         setPrintPageBoxes(pdf);
-        pdf.addImage(image, "JPEG", 0, 0, 216, 303, alias, "FAST");
+        pdf.addImage(image, "PNG", 0, 0, 216, 303, alias, "FAST");
         pdf.setDrawColor(0, 0, 0);
         pdf.setLineWidth(0.15);
         [[0.5, 3, 2.5, 3], [3, 0.5, 3, 2.5], [213.5, 3, 215.5, 3], [213, 0.5, 213, 2.5], [0.5, 300, 2.5, 300], [3, 300.5, 3, 302.5], [213.5, 300, 215.5, 300], [213, 300.5, 213, 302.5]].forEach(([x1, y1, x2, y2]) => pdf.line(x1, y1, x2, y2));
