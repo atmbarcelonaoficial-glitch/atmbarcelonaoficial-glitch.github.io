@@ -101,6 +101,12 @@ test("keeps GTFS import, adaptive templates and pagination connected", async () 
   assert.match(page, /overview:\s*true/);
   assert.match(page, /leftLogoRef/);
   assert.match(page, /footer-accordion/);
+  assert.match(page, /routeSearchOptions/);
+  assert.match(page, /normalizeRouteSearch/);
+  assert.match(page, /Cerca ràpida/);
+  assert.match(page, /gtfs-route-suggestions/);
+  assert.match(page, /Codi, nom o destinació/);
+  assert.match(css, /\.route-search-field/);
   assert.match(page, /lineTitle \|\| \[origin, destination\]/);
   assert.match(page, /setZoom/);
   assert.match(css, /paper-stack/);

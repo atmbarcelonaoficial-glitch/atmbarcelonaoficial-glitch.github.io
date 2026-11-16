@@ -52,6 +52,14 @@ function currentDateLabel() {
   return `Generat: ${value.day}.${value.month}.${value.year}`;
 }
 
+function routeSearchLabel(route: { id: string; shortName: string; longName: string }) {
+  return [route.shortName || route.id, route.longName].filter(Boolean).join(" · ");
+}
+
+function normalizeRouteSearch(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("ca").trim();
+}
+
 function canvasWithUniformBleed(source: HTMLCanvasElement) {
   const pixelsPerMm = 6;
   const bleed = 3 * pixelsPerMm;
@@ -277,6 +285,7 @@ export default function Home() {
   const [feedOptions, setFeedOptions] = useState<GtfsFeedOption[]>([]);
   const [dataset, setDataset] = useState<GtfsDataset | null>(null);
   const [selectedRoute, setSelectedRoute] = useState("");
+  const [routeQuery, setRouteQuery] = useState("");
   const [selectedDirection, setSelectedDirection] = useState("0");
   const [selectedService, setSelectedService] = useState("");
   const [gtfsStatus, setGtfsStatus] = useState<"idle" | "reading" | "ready" | "error">("idle");
@@ -368,6 +377,22 @@ export default function Home() {
   const renderedVersions = exportPage ? [exportPage] : currentRenderedVersions;
   const directionOptions = dataset ? directionsFor(dataset, selectedRoute) : [];
   const serviceOptions = dataset ? servicesFor(dataset, selectedRoute, selectedDirection) : [];
+  const routeSearchOptions = useMemo(() => {
+    if (!dataset) return [];
+    const query = normalizeRouteSearch(routeQuery);
+    return dataset.routes
+      .map((route) => {
+        const code = normalizeRouteSearch(route.shortName || route.id);
+        const label = routeSearchLabel(route);
+        const title = normalizeRouteSearch(route.longName);
+        const searchable = normalizeRouteSearch(`${route.id} ${label}`);
+        const score = !query ? 4 : code === query ? 0 : code.startsWith(query) ? 1 : title.startsWith(query) ? 2 : 3;
+        return { route, label, searchable, score };
+      })
+      .filter((item) => !query || query.split(/\s+/).every((term) => item.searchable.includes(term)))
+      .sort((a, b) => a.score - b.score || a.label.localeCompare(b.label, "ca", { numeric: true }))
+      .slice(0, 12);
+  }, [dataset, routeQuery]);
   const versionCount = stops.length
     ? (generalView ? 1 : periodVariants.reduce((total) => total + physicalStops.length + 1, 0))
     : 0;
@@ -508,6 +533,7 @@ export default function Home() {
         const service = servicesFor(parsed, firstRoute.id, direction)[0]?.id || "";
         setDataset(parsed);
         setSelectedRoute(firstRoute.id);
+        setRouteQuery(routeSearchLabel(firstRoute));
         setSelectedDirection(direction);
         setSelectedService(service);
         applyGtfsLine(parsed, firstRoute.id, direction, service);
@@ -542,9 +568,11 @@ export default function Home() {
 
   const changeRoute = (routeId: string) => {
     if (!dataset) return;
+    const route = dataset.routes.find((item) => item.id === routeId);
     const direction = directionsFor(dataset, routeId)[0] || "0";
     const service = servicesFor(dataset, routeId, direction)[0]?.id || "";
     setSelectedRoute(routeId);
+    setRouteQuery(route ? routeSearchLabel(route) : "");
     setSelectedDirection(direction);
     setSelectedService(service);
     applyGtfsLine(dataset, routeId, direction, service);
@@ -740,6 +768,7 @@ export default function Home() {
     setFeedOptions([]);
     setDataset(null);
     setSelectedRoute("");
+    setRouteQuery("");
     setSelectedDirection("0");
     setSelectedService("");
     setGtfsStatus("idle");
@@ -858,7 +887,7 @@ export default function Home() {
             {feedOptions.length > 1 && !dataset && <div className="feed-picker"><b>Feeds disponibles</b>{feedOptions.map((feed) => <button key={feed.name} onClick={() => chooseDataset(feed)}><span>▤</span><span><b>{feed.name.replace(/\.zip$/i, "")}</b><small>Obre i analitza aquest feed</small></span><i>→</i></button>)}</div>}
             {dataset && <>
               <div className="gtfs-summary"><div><strong>{dataset.diagnostics.routes}</strong><span>línies bus</span></div><div><strong>{dataset.diagnostics.stops.toLocaleString("ca")}</strong><span>parades</span></div><div><strong>{dataset.diagnostics.trips.toLocaleString("ca")}</strong><span>viatges</span></div></div>
-              <section className="gtfs-selection"><span>02 · SELECCIÓ</span><label><b>Línia</b><select value={selectedRoute} onChange={(event) => changeRoute(event.target.value)}>{dataset.routes.map((route) => <option value={route.id} key={route.id}>{route.shortName || route.id} · {route.longName}</option>)}</select></label><div className="two"><label><b>Sentit</b><select value={selectedDirection} onChange={(event) => changeDirection(event.target.value)}>{directionOptions.map((direction) => <option value={direction} key={direction}>Sentit {Number(direction) + 1}</option>)}</select></label><label><b>Període</b><select value={selectedService} onChange={(event) => changeService(event.target.value)}>{serviceOptions.map((service) => <option value={service.id} key={service.id}>{service.label} · {service.count}</option>)}</select></label></div></section>
+              <section className="gtfs-selection"><span>02 · SELECCIÓ</span><label className="route-search"><b>Cerca ràpida</b><span className="route-search-field"><i aria-hidden="true">⌕</i><input type="search" list="gtfs-route-suggestions" value={routeQuery} placeholder="Codi, nom o destinació…" autoComplete="off" onChange={(event) => { const value = event.target.value; setRouteQuery(value); const normalized = normalizeRouteSearch(value); const exact = dataset.routes.find((route) => normalizeRouteSearch(routeSearchLabel(route)) === normalized || normalizeRouteSearch(route.shortName || route.id) === normalized); if (exact && exact.id !== selectedRoute) changeRoute(exact.id); }} onKeyDown={(event) => { if (event.key === "Enter" && routeSearchOptions[0]) { event.preventDefault(); changeRoute(routeSearchOptions[0].route.id); } }} /></span><small>Escriu part del codi, el nom o la destinació.</small><datalist id="gtfs-route-suggestions">{routeSearchOptions.map(({ route, label }) => <option value={label} key={route.id} />)}</datalist></label><label><b>Totes les línies</b><select value={selectedRoute} onChange={(event) => changeRoute(event.target.value)}>{dataset.routes.map((route) => <option value={route.id} key={route.id}>{routeSearchLabel(route)}</option>)}</select></label><div className="two"><label><b>Sentit</b><select value={selectedDirection} onChange={(event) => changeDirection(event.target.value)}>{directionOptions.map((direction) => <option value={direction} key={direction}>Sentit {Number(direction) + 1}</option>)}</select></label><label><b>Període</b><select value={selectedService} onChange={(event) => changeService(event.target.value)}>{serviceOptions.map((service) => <option value={service.id} key={service.id}>{service.label} · {service.count}</option>)}</select></label></div></section>
               <section className="diagnosis"><header><span>03 · DIAGNOSI</span><b>Peça preparada</b></header><dl><div><dt>Recorregut</dt><dd>{detectedCircular ? "Circular" : "Normal"}</dd></div><div><dt>Expedicions</dt><dd>{importedTrips}</dd></div><div><dt>Horari</dt><dd>{useFrequency ? "Freqüències" : "Exacte"}</dd></div><div><dt>Sortida</dt><dd>{pages.length} {pages.length === 1 ? "pàgina" : "pàgines"}</dd></div></dl>{importWarnings.length > 0 && <ul>{importWarnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}</section>
             </>}
             <details className="legacy-import"><summary>Importació manual de suport</summary><button className="upload" onClick={() => legacyFileRef.current?.click()}><span>↑</span><b>Importa una plantilla Emma</b><small>CSV o Excel amb una fila per parada</small></button><button className="download-template" onClick={downloadEmmaTemplate}>↓ Descarrega la plantilla CSV</button><input ref={legacyFileRef} type="file" accept=".csv,.xlsx,.xls" hidden onChange={(e) => handleFile(e.target.files?.[0])} /></details>
