@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { strToU8, zipSync } from "fflate";
-import { importLine, parseGtfsFeed } from "../app/lib/gtfs.ts";
+import { importLine, parseGtfsFeed, servicesFor } from "../app/lib/gtfs.ts";
 
 function gtfsFeed(serviceIds) {
   const trips = serviceIds.map((serviceId, index) => `R1,${serviceId},T${index + 1},Destí,0,1`).join("\n");
@@ -38,4 +38,9 @@ test("omits calendar exceptions when an operator has multiple calendars", () => 
   const dataset = parseGtfsFeed(gtfsFeed(["S1", "S2"]));
   const imported = importLine(dataset, "R1", "0", "S1");
   assert.equal(imported.notes.length, 0);
+});
+
+test("lists equivalent service calendars only once", () => {
+  const dataset = parseGtfsFeed(gtfsFeed(["S1", "S2", "S3", "S4"]));
+  assert.deepEqual(servicesFor(dataset, "R1", "0"), [{ id: "S1", count: 1, label: "Cada dia" }]);
 });

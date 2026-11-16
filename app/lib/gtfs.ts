@@ -434,8 +434,15 @@ export function servicesFor(dataset: GtfsDataset, routeId: string, direction: st
   dataset.trips.filter((trip) => trip.routeId === routeId && trip.direction === direction).forEach((trip) => {
     counts.set(trip.serviceId, (counts.get(trip.serviceId) || 0) + 1);
   });
-  return Array.from(counts, ([id, count]) => ({ id, count, label: dataset.serviceLabels.get(id) || "Servei especial" }))
+  const sorted = Array.from(counts, ([id, count]) => ({ id, count, label: dataset.serviceLabels.get(id) || "Servei especial" }))
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "ca"));
+  const uniqueLabels = new Set<string>();
+  return sorted.filter((service) => {
+    const key = service.label.trim().toLocaleLowerCase("ca");
+    if (uniqueLabels.has(key)) return false;
+    uniqueLabels.add(key);
+    return true;
+  });
 }
 
 function timeValue(value: string) {

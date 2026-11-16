@@ -45,6 +45,8 @@ test("keeps GTFS import, adaptive templates and pagination connected", async () 
   assert.match(gtfs, /frequencyBased/);
   assert.match(gtfs, /route_type/);
   assert.match(gtfs, /routeLongName:\s*route\.longName/);
+  assert.match(gtfs, /uniqueLabels/);
+  assert.match(gtfs, /service\.label\.trim\(\)\.toLocaleLowerCase\("ca"\)/);
   assert.match(gtfs, /operatorServiceIds\.size === 1/);
   assert.match(gtfs, /removedDates\.length/);
   assert.match(gtfs, /excepte \$\{naturalList\(removedDates\)\}/);
