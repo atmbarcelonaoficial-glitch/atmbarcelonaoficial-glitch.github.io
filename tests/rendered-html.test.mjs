@@ -45,6 +45,13 @@ test("keeps GTFS import, adaptive templates and pagination connected", async () 
   assert.match(gtfs, /frequencyBased/);
   assert.match(gtfs, /route_type/);
   assert.match(gtfs, /routeLongName:\s*route\.longName/);
+  assert.match(gtfs, /operatorServiceIds\.size === 1/);
+  assert.match(gtfs, /removedDates\.length/);
+  assert.match(gtfs, /excepte \$\{naturalList\(removedDates\)\}/);
+  assert.match(gtfs, /També circula \$\{naturalList\(addedDates\)\}/);
+  assert.match(gtfs, /Circula de dilluns a diumenges i festius/);
+  assert.doesNotMatch(gtfs, /dies sense servei/);
+  assert.doesNotMatch(gtfs, /Excepcions del calendari:/);
   assert.match(page, /A4 · recorregut \+ horaris/);
   assert.match(page, /A4 · horaris complets/);
   assert.doesNotMatch(page, /Auto · recomanat|Mig A4 · línia/);

@@ -57,8 +57,9 @@ export type GtfsDataset = {
 export type GtfsServiceMeta = {
   startDate: string;
   endDate: string;
-  addedDates: number;
-  removedDates: number;
+  activeDays: boolean[];
+  addedDates: string[];
+  removedDates: string[];
 };
 
 export type GtfsFeedOption = {
@@ -260,6 +261,42 @@ function calendarLabel(row: Record<string, string>) {
   return label;
 }
 
+function calendarDays(row: Record<string, string>) {
+  return ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+    .map((day) => row[day] === "1");
+}
+
+function naturalDate(value: string) {
+  if (!/^\d{8}$/.test(value)) return value;
+  const day = Number(value.slice(6, 8));
+  const month = [
+    "gener", "febrer", "març", "abril", "maig", "juny",
+    "juliol", "agost", "setembre", "octubre", "novembre", "desembre",
+  ][Number(value.slice(4, 6)) - 1];
+  if (!month) return value;
+  const connector = /^[aeiouàèéíòóúh]/i.test(month) ? "d'" : "de ";
+  return `${day === 1 ? "l'1" : `el ${day}`} ${connector}${month}`;
+}
+
+function naturalList(values: string[]) {
+  if (values.length < 2) return values[0] || "";
+  return `${values.slice(0, -1).join(", ")} i ${values[values.length - 1]}`;
+}
+
+function circulationText(meta: GtfsServiceMeta, fallbackLabel: string) {
+  const active = meta.activeDays;
+  if (active.length === 7 && active.every(Boolean)) return "Circula de dilluns a diumenges i festius";
+  if (active.length === 7 && active.slice(0, 5).every(Boolean) && !active[5] && !active[6]) return "Circula de dilluns a divendres feiners";
+  if (active.length === 7 && !active.slice(0, 5).some(Boolean) && active[5] && active[6]) return "Circula els caps de setmana i festius";
+  if (active.length === 7 && !active.slice(0, 5).some(Boolean) && active[5] && !active[6]) return "Circula els dissabtes";
+  if (active.length === 7 && !active.slice(0, 6).some(Boolean) && active[6]) return "Circula els diumenges i festius";
+  if (active.some(Boolean)) {
+    const names = ["dilluns", "dimarts", "dimecres", "dijous", "divendres", "dissabtes", "diumenges i festius"];
+    return `Circula els ${naturalList(names.filter((_, index) => active[index]))}`;
+  }
+  return `Circula segons el calendari ${fallbackLabel.toLocaleLowerCase("ca")}`;
+}
+
 export function parseGtfsFeed(option: GtfsFeedOption): GtfsDataset {
   const entries = unzipGtfs(option.bytes);
   validateGtfsEntries(entries);
@@ -319,18 +356,25 @@ export function parseGtfsFeed(option: GtfsFeedOption): GtfsDataset {
     serviceMeta.set(row.service_id, {
       startDate: row.start_date || "",
       endDate: row.end_date || "",
-      addedDates: 0,
-      removedDates: 0,
+      activeDays: calendarDays(row),
+      addedDates: [],
+      removedDates: [],
     });
   });
   csvRows(decode(entries["calendar_dates.txt"])).forEach((row) => {
     if (!row.service_id) return;
     if (!serviceLabels.has(row.service_id)) serviceLabels.set(row.service_id, "Calendari especial");
-    const meta = serviceMeta.get(row.service_id) || { startDate: row.date || "", endDate: row.date || "", addedDates: 0, removedDates: 0 };
+    const meta = serviceMeta.get(row.service_id) || {
+      startDate: row.date || "",
+      endDate: row.date || "",
+      activeDays: [],
+      addedDates: [],
+      removedDates: [],
+    };
     if (row.date && (!meta.startDate || row.date < meta.startDate)) meta.startDate = row.date;
     if (row.date && (!meta.endDate || row.date > meta.endDate)) meta.endDate = row.date;
-    if (row.exception_type === "1") meta.addedDates += 1;
-    if (row.exception_type === "2") meta.removedDates += 1;
+    if (row.date && row.exception_type === "1" && !meta.addedDates.includes(row.date)) meta.addedDates.push(row.date);
+    if (row.date && row.exception_type === "2" && !meta.removedDates.includes(row.date)) meta.removedDates.push(row.date);
     serviceMeta.set(row.service_id, meta);
   });
 
@@ -508,13 +552,15 @@ export function importLine(dataset: GtfsDataset, routeId: string, direction: str
     });
   }
   const serviceMeta = dataset.serviceMeta.get(serviceId);
-  const exceptionCount = (serviceMeta?.addedDates || 0) + (serviceMeta?.removedDates || 0);
-  if (serviceMeta && exceptionCount > 0 && exceptionCount <= 20) {
-    const parts = [
-      serviceMeta.addedDates ? `${serviceMeta.addedDates} dies afegits` : "",
-      serviceMeta.removedDates ? `${serviceMeta.removedDates} dies sense servei` : "",
-    ].filter(Boolean);
-    notes.unshift(`Excepcions del calendari: ${parts.join(" · ")}.`);
+  const operatorRouteIds = new Set(dataset.routes.filter((item) => item.agencyId === route.agencyId).map((item) => item.id));
+  const operatorServiceIds = new Set(dataset.trips.filter((trip) => operatorRouteIds.has(trip.routeId)).map((trip) => trip.serviceId));
+  if (serviceMeta?.activeDays.length === 7 && operatorServiceIds.size === 1 && (serviceMeta.removedDates.length || serviceMeta.addedDates.length)) {
+    const removedDates = [...serviceMeta.removedDates].sort().map(naturalDate);
+    const addedDates = [...serviceMeta.addedDates].sort().map(naturalDate);
+    const circulation = circulationText(serviceMeta, dataset.serviceLabels.get(serviceId) || "seleccionat");
+    const removedText = removedDates.length ? `, excepte ${naturalList(removedDates)}` : "";
+    const addedText = addedDates.length ? ` També circula ${naturalList(addedDates)}.` : "";
+    notes.unshift(`${circulation}${removedText}.${addedText}`);
   }
   const firstTimes = tripIds.map((id) => calls.get(id)?.[0]?.time || "").filter(Boolean);
   const nightTrips = firstTimes.filter((time) => {
