@@ -61,7 +61,13 @@ function normalizeRouteSearch(value: string) {
 }
 
 const PRINT_PIXELS_PER_MM = 12; // 304,8 ppp: resolució d'impremta, per sobre dels 300 ppp.
-const PRINT_BLEED_PX = 3 * PRINT_PIXELS_PER_MM;
+const PRINT_BLEED_MM = 3;
+const PRINT_SLUG_MM = 5;
+const PRINT_ARTWORK_WIDTH_MM = 210 + PRINT_BLEED_MM * 2;
+const PRINT_ARTWORK_HEIGHT_MM = 297 + PRINT_BLEED_MM * 2;
+const PRINT_PAGE_WIDTH_MM = PRINT_ARTWORK_WIDTH_MM + PRINT_SLUG_MM * 2;
+const PRINT_PAGE_HEIGHT_MM = PRINT_ARTWORK_HEIGHT_MM + PRINT_SLUG_MM * 2;
+const PRINT_BLEED_PX = PRINT_BLEED_MM * PRINT_PIXELS_PER_MM;
 const PRINT_TRIM_WIDTH_PX = 210 * PRINT_PIXELS_PER_MM;
 const PRINT_TRIM_HEIGHT_PX = 297 * PRINT_PIXELS_PER_MM;
 
@@ -107,6 +113,75 @@ function canvasPreview(source: HTMLCanvasElement) {
   return preview.toDataURL("image/jpeg", 0.92);
 }
 
+function printableStyles() {
+  return Array.from(document.styleSheets)
+    .flatMap((sheet) => {
+      try {
+        return Array.from(sheet.cssRules, (rule) => rule.cssText);
+      } catch {
+        return [];
+      }
+    })
+    .join("\n");
+}
+
+async function renderElementWithBrowser(element: HTMLElement) {
+  const bounds = element.getBoundingClientRect();
+  const renderWidth = bounds.width;
+  const renderHeight = bounds.height;
+  const scale = PRINT_TRIM_WIDTH_PX / renderWidth;
+  const clone = element.cloneNode(true) as HTMLElement;
+  clone.style.width = `${renderWidth}px`;
+  clone.style.height = `${renderHeight}px`;
+  clone.style.minWidth = `${renderWidth}px`;
+  clone.style.minHeight = `${renderHeight}px`;
+  clone.style.maxWidth = `${renderWidth}px`;
+  clone.style.maxHeight = `${renderHeight}px`;
+  clone.style.aspectRatio = "auto";
+  clone.style.boxShadow = "none";
+  clone.style.overflow = "hidden";
+  clone.style.transform = `scale(${scale})`;
+  clone.style.transformOrigin = "top left";
+  clone.querySelectorAll<HTMLElement>(".sheet-footer .logo-slot.empty").forEach((slot) => {
+    slot.style.borderColor = "transparent";
+    slot.querySelectorAll<HTMLElement>("span").forEach((label) => { label.style.visibility = "hidden"; });
+  });
+
+  const wrapper = document.createElement("div");
+  const inheritedStyle = getComputedStyle(element);
+  wrapper.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
+  wrapper.style.width = `${PRINT_TRIM_WIDTH_PX}px`;
+  wrapper.style.height = `${PRINT_TRIM_HEIGHT_PX}px`;
+  wrapper.style.overflow = "hidden";
+  wrapper.style.background = "#fff";
+  wrapper.style.fontFamily = inheritedStyle.fontFamily;
+  wrapper.style.fontSize = inheritedStyle.fontSize;
+  wrapper.style.fontWeight = inheritedStyle.fontWeight;
+  wrapper.style.lineHeight = inheritedStyle.lineHeight;
+  wrapper.style.color = inheritedStyle.color;
+  const style = document.createElement("style");
+  style.textContent = printableStyles();
+  wrapper.append(style, clone);
+
+  const serialized = new XMLSerializer().serializeToString(wrapper);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${PRINT_TRIM_WIDTH_PX}" height="${PRINT_TRIM_HEIGHT_PX}" viewBox="0 0 ${PRINT_TRIM_WIDTH_PX} ${PRINT_TRIM_HEIGHT_PX}"><foreignObject x="0" y="0" width="100%" height="100%">${serialized}</foreignObject></svg>`;
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const value = new Image();
+    value.onload = () => resolve(value);
+    value.onerror = () => reject(new Error("No s’ha pogut renderitzar el full amb el navegador."));
+    value.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  });
+  const canvas = document.createElement("canvas");
+  canvas.width = PRINT_TRIM_WIDTH_PX;
+  canvas.height = PRINT_TRIM_HEIGHT_PX;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("No s’ha pogut preparar el full A4.");
+  context.fillStyle = "#fff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
 function setPrintPageBoxes(pdf: import("jspdf").jsPDF) {
   const pointsPerMm = 72 / 25.4;
   const box = (left: number, bottom: number, right: number, top: number) => ({
@@ -116,9 +191,42 @@ function setPrintPageBoxes(pdf: import("jspdf").jsPDF) {
     topRightY: top * pointsPerMm,
   });
   const page = pdf.getCurrentPageInfo().pageContext;
-  page.cropBox = box(0, 0, 216, 303);
-  page.bleedBox = box(0, 0, 216, 303);
-  page.trimBox = box(3, 3, 213, 300);
+  page.cropBox = box(0, 0, PRINT_PAGE_WIDTH_MM, PRINT_PAGE_HEIGHT_MM);
+  page.bleedBox = box(
+    PRINT_SLUG_MM,
+    PRINT_SLUG_MM,
+    PRINT_SLUG_MM + PRINT_ARTWORK_WIDTH_MM,
+    PRINT_SLUG_MM + PRINT_ARTWORK_HEIGHT_MM,
+  );
+  page.trimBox = box(
+    PRINT_SLUG_MM + PRINT_BLEED_MM,
+    PRINT_SLUG_MM + PRINT_BLEED_MM,
+    PRINT_SLUG_MM + PRINT_BLEED_MM + 210,
+    PRINT_SLUG_MM + PRINT_BLEED_MM + 297,
+  );
+}
+
+function drawCropMarks(pdf: import("jspdf").jsPDF) {
+  const trimLeft = PRINT_SLUG_MM + PRINT_BLEED_MM;
+  const trimTop = PRINT_SLUG_MM + PRINT_BLEED_MM;
+  const trimRight = trimLeft + 210;
+  const trimBottom = trimTop + 297;
+  const markStart = 1;
+  const markEnd = PRINT_SLUG_MM - 0.5;
+  const farStartX = PRINT_PAGE_WIDTH_MM - markEnd;
+  const farEndX = PRINT_PAGE_WIDTH_MM - markStart;
+  const farStartY = PRINT_PAGE_HEIGHT_MM - markEnd;
+  const farEndY = PRINT_PAGE_HEIGHT_MM - markStart;
+  [
+    [markStart, trimTop, markEnd, trimTop],
+    [trimLeft, markStart, trimLeft, markEnd],
+    [farStartX, trimTop, farEndX, trimTop],
+    [trimRight, markStart, trimRight, markEnd],
+    [markStart, trimBottom, markEnd, trimBottom],
+    [trimLeft, farStartY, trimLeft, farEndY],
+    [farStartX, trimBottom, farEndX, trimBottom],
+    [trimRight, farStartY, trimRight, farEndY],
+  ].forEach(([x1, y1, x2, y2]) => pdf.line(x1, y1, x2, y2));
 }
 
 function sameStopOccurrence(a?: Stop, b?: Stop) {
@@ -684,10 +792,10 @@ export default function Home() {
     setPdfProgress("Preparant el PDF…");
     try {
       if (!pagesToExport.length) throw new Error("No hi ha cap pàgina per exportar.");
-      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import("html2canvas"), import("jspdf")]);
+      const { jsPDF } = await import("jspdf");
       await document.fonts?.ready;
       document.body.classList.add("pdf-exporting");
-      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: [216, 303], compress: true, putOnlyUsedFonts: true });
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: [PRINT_PAGE_WIDTH_MM, PRINT_PAGE_HEIGHT_MM], compress: true, putOnlyUsedFonts: true });
       const previewPages: string[] = [];
       pdf.setProperties({ title: `${lineCode || "Emma"} · ${lineTitle || "Horaris"}`, subject: "Horaris de transport públic", creator: "Emma · Creador d’horaris" });
       for (let index = 0; index < pagesToExport.length; index += 1) {
@@ -696,24 +804,17 @@ export default function Home() {
         await afterNextPaint();
         const element = paperStackRef.current?.querySelector<HTMLElement>(".paper-wrap .timetable");
         if (!element) throw new Error(`No s’ha pogut preparar la pàgina ${index + 1}.`);
-        if (index > 0) pdf.addPage([216, 303], "portrait");
-        const renderWidth = element.getBoundingClientRect().width;
-        const canvas = await html2canvas(element, {
-          scale: PRINT_TRIM_WIDTH_PX / renderWidth,
-          backgroundColor: "#ffffff",
-          useCORS: true,
-          logging: false,
-          imageTimeout: 15000,
-        });
+        if (index > 0) pdf.addPage([PRINT_PAGE_WIDTH_MM, PRINT_PAGE_HEIGHT_MM], "portrait");
+        const canvas = await renderElementWithBrowser(element);
         const printCanvas = canvasWithUniformBleed(canvas);
         const image = printCanvas.toDataURL("image/png");
         if (preview) previewPages.push(canvasPreview(printCanvas));
         const alias = `emma-page-${index}`;
         setPrintPageBoxes(pdf);
-        pdf.addImage(image, "PNG", 0, 0, 216, 303, alias, "FAST");
+        pdf.addImage(image, "PNG", PRINT_SLUG_MM, PRINT_SLUG_MM, PRINT_ARTWORK_WIDTH_MM, PRINT_ARTWORK_HEIGHT_MM, alias, "FAST");
         pdf.setDrawColor(0, 0, 0);
         pdf.setLineWidth(0.15);
-        [[0.5, 3, 2.5, 3], [3, 0.5, 3, 2.5], [213.5, 3, 215.5, 3], [213, 0.5, 213, 2.5], [0.5, 300, 2.5, 300], [3, 300.5, 3, 302.5], [213.5, 300, 215.5, 300], [213, 300.5, 213, 302.5]].forEach(([x1, y1, x2, y2]) => pdf.line(x1, y1, x2, y2));
+        drawCropMarks(pdf);
       }
       const filename = `emma-${(lineCode || "horaris").replace(/[^a-z0-9_-]+/gi, "-").toLowerCase()}.pdf`;
       if (preview) {
