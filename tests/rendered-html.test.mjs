@@ -49,8 +49,9 @@ test("keeps GTFS import, adaptive templates and pagination connected", async () 
   assert.match(gtfs, /service\.label\.trim\(\)\.toLocaleLowerCase\("ca"\)/);
   assert.match(gtfs, /operatorServiceIds\.size === 1/);
   assert.match(gtfs, /removedDates\.length/);
-  assert.match(gtfs, /excepte \$\{naturalList\(removedDates\)\}/);
-  assert.match(gtfs, /També circula \$\{naturalList\(addedDates\)\}/);
+  assert.match(gtfs, /naturalDateList/);
+  assert.match(gtfs, /excepte \$\{naturalDateList\(serviceMeta\.removedDates\)\}/);
+  assert.match(gtfs, /També circula \$\{naturalDateList\(serviceMeta\.addedDates\)\}/);
   assert.match(gtfs, /Circula de dilluns a diumenges i festius/);
   assert.doesNotMatch(gtfs, /dies sense servei/);
   assert.doesNotMatch(gtfs, /Excepcions del calendari:/);

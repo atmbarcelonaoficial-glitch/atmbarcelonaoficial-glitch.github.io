@@ -283,6 +283,44 @@ function naturalList(values: string[]) {
   return `${values.slice(0, -1).join(", ")} i ${values[values.length - 1]}`;
 }
 
+function naturalDateList(values: string[]) {
+  const dates = [...new Set(values)].sort();
+  const validDates = dates.filter((value) => /^\d{8}$/.test(value));
+  const years = new Set(validDates.map((value) => value.slice(0, 4)));
+  if (validDates.length !== dates.length || years.size <= 1) return naturalList(dates.map(naturalDate));
+
+  const monthNames = [
+    "gener", "febrer", "març", "abril", "maig", "juny",
+    "juliol", "agost", "setembre", "octubre", "novembre", "desembre",
+  ];
+  const datesByYear = new Map<string, Map<number, number[]>>();
+  validDates.forEach((value) => {
+    const year = value.slice(0, 4);
+    const month = Number(value.slice(4, 6));
+    const day = Number(value.slice(6, 8));
+    const months = datesByYear.get(year) || new Map<number, number[]>();
+    const days = months.get(month) || [];
+    if (!days.includes(day)) days.push(day);
+    months.set(month, days);
+    datesByYear.set(year, months);
+  });
+
+  return Array.from(datesByYear.entries()).flatMap(([year, months]) => {
+    const monthGroups = Array.from(months.entries()).map(([month, rawDays]) => {
+      const days = [...rawDays].sort((a, b) => a - b);
+      const dayList = days.length < 2
+        ? String(days[0])
+        : `${days.slice(0, -1).join(", ")} i ${days[days.length - 1]}`;
+      const monthName = monthNames[month - 1];
+      const connector = /^[aeiouàèéíòóúh]/i.test(monthName) ? "d'" : "de ";
+      const article = days[0] === 1 ? "l'" : "el ";
+      return `${article}${dayList} ${connector}${monthName}`;
+    });
+    monthGroups[monthGroups.length - 1] += ` de ${year}`;
+    return monthGroups;
+  }).join(", ");
+}
+
 function circulationText(meta: GtfsServiceMeta, fallbackLabel: string) {
   const active = meta.activeDays;
   if (active.length === 7 && active.every(Boolean)) return "Circula de dilluns a diumenges i festius";
@@ -562,11 +600,9 @@ export function importLine(dataset: GtfsDataset, routeId: string, direction: str
   const operatorRouteIds = new Set(dataset.routes.filter((item) => item.agencyId === route.agencyId).map((item) => item.id));
   const operatorServiceIds = new Set(dataset.trips.filter((trip) => operatorRouteIds.has(trip.routeId)).map((trip) => trip.serviceId));
   if (serviceMeta?.activeDays.length === 7 && operatorServiceIds.size === 1 && (serviceMeta.removedDates.length || serviceMeta.addedDates.length)) {
-    const removedDates = [...serviceMeta.removedDates].sort().map(naturalDate);
-    const addedDates = [...serviceMeta.addedDates].sort().map(naturalDate);
     const circulation = circulationText(serviceMeta, dataset.serviceLabels.get(serviceId) || "seleccionat");
-    const removedText = removedDates.length ? `, excepte ${naturalList(removedDates)}` : "";
-    const addedText = addedDates.length ? ` També circula ${naturalList(addedDates)}.` : "";
+    const removedText = serviceMeta.removedDates.length ? `, excepte ${naturalDateList(serviceMeta.removedDates)}` : "";
+    const addedText = serviceMeta.addedDates.length ? ` També circula ${naturalDateList(serviceMeta.addedDates)}.` : "";
     notes.unshift(`${circulation}${removedText}.${addedText}`);
   }
   const firstTimes = tripIds.map((id) => calls.get(id)?.[0]?.time || "").filter(Boolean);
