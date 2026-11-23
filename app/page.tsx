@@ -335,6 +335,13 @@ function singlePageOverview(stops: Stop[], layout: Layout, frequency: boolean): 
   };
 }
 
+function overviewDensityClass(stops: Stop[], tripCount: number) {
+  const rowUnits = stops.reduce((total, stop) => total + Math.max(1, Math.ceil(stop.name.trim().length / 24)), 0);
+  if (rowUnits > 44 || tripCount > 18) return " overview-ultra";
+  if (rowUnits > 32 || tripCount > 14) return " overview-dense";
+  return "";
+}
+
 function afterNextPaint() {
   return new Promise<void>((resolve) => {
     window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()));
@@ -1159,9 +1166,7 @@ function TimetablePage({ page, layout, circular, frequency, currentStop, overvie
     return Array.from({ length: max }, (_, trip) => page.stops.map((stop) => stop.times[trip] || "—"));
   }, [page.stops]);
   const currentTimes = currentStop?.times || page.stops[0]?.times || [];
-  const overviewDensity = overview
-    ? (page.stops.length > 32 || trips.length > 28 ? " overview-ultra" : page.stops.length > 22 || trips.length > 16 ? " overview-dense" : "")
-    : "";
+  const overviewDensity = overview ? overviewDensityClass(page.stops, trips.length) : "";
   return <div className={`paper-wrap layout-${layout}`}>
     <article className={`timetable ${night ? "night" : ""} ${gradient ? "gradient" : "red"}${overview ? ` overview-version${overviewDensity}` : ""}`} style={{ "--line": lineColor, "--line-ink": contrastText(lineColor), "--pastel": mixWithWhite(lineColor, .76), "--active-row": mixWithWhite(lineColor, .86) } as React.CSSProperties}>
       <header className="sheet-header">

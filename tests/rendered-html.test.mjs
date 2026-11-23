@@ -60,6 +60,9 @@ test("keeps GTFS import, adaptive templates and pagination connected", async () 
   assert.doesNotMatch(page, /Auto · recomanat|Mig A4 · línia/);
   assert.match(page, /function paginate/);
   assert.match(page, /function singlePageOverview/);
+  assert.match(page, /function overviewDensityClass/);
+  assert.match(page, /rowUnits > 44 \|\| tripCount > 18/);
+  assert.match(page, /rowUnits > 32 \|\| tripCount > 14/);
   assert.match(page, /total:\s*1/);
   assert.match(page, /paginate\(stops, 0, layout, frequency\)\[0\]/);
   assert.match(page, /stop\.times\.slice\(0, visibleTripCount\)/);
@@ -144,4 +147,8 @@ test("keeps GTFS import, adaptive templates and pagination connected", async () 
   assert.match(css, /\.remove-stop-dialog/);
   assert.match(css, /\.pdf-preview-dialog/);
   assert.match(css, /\.route-stop\.is-terminal b/);
+  assert.match(css, /--overview-time-size:8px/);
+  assert.match(css, /overview-dense\{--overview-time-size:7\.8px/);
+  assert.match(css, /overview-ultra\{--overview-time-size:7px/);
+  assert.match(css, /width:28%/);
 });
